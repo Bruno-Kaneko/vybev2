@@ -8,20 +8,23 @@ import {
   TouchableOpacity,
   Animated,
   Share as NativeShare,
+  Modal,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, Heart, MapPin, MessageCircle, Send } from 'lucide-react-native';
+import { Bell, Heart, MapPin, MessageCircle, Send, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_POSTS } from '@/constants/MockData';
+import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
-import type { Post } from '@/types';
+import type { Post, Chat } from '@/types';
 
 export default function HomeScreen() {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
+  const [messagesOpen, setMessagesOpen] = useState(false);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -36,32 +39,114 @@ export default function HomeScreen() {
             paddingBottom: 110,
           },
         ]}
-        ListHeaderComponent={<HomeHeader maxWidth={responsive.feedMaxWidth} />}
+        ListHeaderComponent={
+          <HomeHeader
+            maxWidth={responsive.feedMaxWidth}
+            onMessagesPress={() => setMessagesOpen(true)}
+          />
+        }
         renderItem={({ item }) => (
           <PostCard post={item} maxWidth={responsive.feedMaxWidth} isPhone={responsive.isPhone} />
         )}
+      />
+      <MessagesDrawer
+        visible={messagesOpen}
+        onClose={() => setMessagesOpen(false)}
+        insets={insets}
       />
     </View>
   );
 }
 
-function HomeHeader({ maxWidth }: { maxWidth: number }) {
+function HomeHeader({ maxWidth, onMessagesPress }: { maxWidth: number; onMessagesPress: () => void }) {
   return (
     <View style={[styles.header, { maxWidth, alignSelf: 'center', width: '100%' }]}>
       <BrandLogo width={118} height={38} />
       <View style={styles.headerActions}>
-        <TouchableOpacity
-          style={styles.iconButton}
-          activeOpacity={0.78}
-          onPress={() => router.push('/(tabs)/chat/index' as any)}
-        >
-          <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
-        </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
           <Bell color={Colors.white} size={18} strokeWidth={2.1} />
         </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onMessagesPress}>
+          <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
+        </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+function MessagesDrawer({
+  visible,
+  onClose,
+  insets,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  insets: { bottom: number; top: number };
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.drawerContainer}>
+        <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
+        <View style={[styles.drawerSheet, { paddingBottom: insets.bottom + Spacing.xl }]}>
+          <View style={styles.drawerHandle} />
+          <View style={styles.drawerHeader}>
+            <Text style={styles.drawerTitle}>Mensagens</Text>
+            <TouchableOpacity onPress={onClose} style={styles.drawerClose}>
+              <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={MOCK_CHATS}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => <DrawerChatRow chat={item} onClose={onClose} />}
+            ListEmptyComponent={
+              <View style={styles.drawerEmpty}>
+                <MessageCircle color={Colors.textMuted} size={40} strokeWidth={1.8} />
+                <Text style={styles.drawerEmptyText}>Sem mensagens ainda</Text>
+              </View>
+            }
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function DrawerChatRow({ chat, onClose }: { chat: Chat; onClose: () => void }) {
+  const other = chat.participants[0];
+  const diff = Date.now() - (chat.lastMessageAt ?? 0);
+  const mins = Math.floor(diff / 60000);
+  const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;
+
+  return (
+    <TouchableOpacity
+      style={styles.drawerRow}
+      activeOpacity={0.8}
+      onPress={() => {
+        onClose();
+        router.push(`/(tabs)/chat/${other.id}` as any);
+      }}
+    >
+      <View style={styles.drawerAvatarWrap}>
+        <Avatar uri={other.avatar} size="md" />
+        {chat.unreadCount > 0 && <View style={styles.drawerDot} />}
+      </View>
+      <View style={styles.drawerRowInfo}>
+        <View style={styles.drawerRowTop}>
+          <Text style={[styles.drawerRowName, chat.unreadCount > 0 && { color: Colors.white }]}>
+            {other.displayName}
+          </Text>
+          <Text style={styles.drawerRowTime}>{timeStr}</Text>
+        </View>
+        <Text
+          style={[styles.drawerRowPreview, chat.unreadCount > 0 && { color: Colors.text }]}
+          numberOfLines={1}
+        >
+          {chat.lastMessage}
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -308,6 +393,110 @@ const styles = StyleSheet.create({
   comments: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  // Messages drawer
+  drawerContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  drawerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  drawerSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    maxHeight: '85%',
+    paddingTop: Spacing.sm,
+  },
+  drawerHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: Spacing.md,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  drawerTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize['2xl'],
+    color: Colors.white,
+  },
+  drawerClose: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  drawerAvatarWrap: {
+    position: 'relative',
+  },
+  drawerDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.secondary,
+    borderWidth: 2,
+    borderColor: Colors.surface,
+  },
+  drawerRowInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  drawerRowTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  drawerRowName: {
+    flex: 1,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+  },
+  drawerRowTime: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textDisabled,
+  },
+  drawerRowPreview: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textDisabled,
+  },
+  drawerEmpty: {
+    alignItems: 'center',
+    paddingVertical: Spacing['4xl'],
+    gap: Spacing.md,
+  },
+  drawerEmptyText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
     color: Colors.textMuted,
   },
 });

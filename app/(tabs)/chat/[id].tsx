@@ -65,7 +65,7 @@ export default function ChatScreen() {
           inverted={false}
         />
 
-        <View style={[styles.inputRow, { paddingBottom: insets.bottom + Spacing.sm }]}>
+        <View style={[styles.inputRow, { paddingBottom: insets.bottom + 70 }]}>
           <View style={styles.inputShell}>
             <TextInput
               value={text}
