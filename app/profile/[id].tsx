@@ -51,8 +51,6 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <StatItem label="Posts" value={userPosts.length} />
-          <View style={styles.statDivider} />
           <StatItem label="Seguidores" value={user.followers} />
           <View style={styles.statDivider} />
           <StatItem label="Seguindo" value={user.following} />
@@ -77,7 +75,7 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>Posts</Text>
           </View>
           <View style={[styles.postsGrid, { gap: thumbGap }]}>
-            {MOCK_POSTS.map(post => (
+            {userPosts.map(post => (
               <TouchableOpacity
                 key={post.id}
                 style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}

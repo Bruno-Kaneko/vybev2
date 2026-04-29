@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, ChevronLeft, MapPin } from 'lucide-react-native';
+import { ArrowUp, ChevronLeft } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
@@ -27,6 +27,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const chatWidth = responsive.isDesktop ? 720 : responsive.contentMaxWidth;
   const [text, setText] = useState('');
   const [messages, setMessages] = useState(MOCK_MESSAGES);
 
@@ -44,21 +45,16 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
-      <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
+      <View style={[styles.shell, { maxWidth: chatWidth }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/chat')} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
           <Avatar uri={user.avatar} size="sm" />
-          <View>
+          <View style={styles.headerCopy}>
             <Text style={styles.headerName}>{user.displayName}</Text>
-            <Text style={styles.headerSub}>@{user.username}</Text>
+            <Text style={styles.headerSub}>Ativo agora</Text>
           </View>
-        </View>
-
-        <View style={styles.samePlaceBanner}>
-          <MapPin color={Colors.secondary} size={15} strokeWidth={2.2} />
-          <Text style={styles.samePlaceText}>Voces estao no mesmo lugar agora</Text>
         </View>
 
         <FlatList
@@ -70,19 +66,21 @@ export default function ChatScreen() {
         />
 
         <View style={[styles.inputRow, { paddingBottom: insets.bottom + Spacing.sm }]}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder="Mensagem..."
-            placeholderTextColor={Colors.textDisabled}
-            style={styles.input}
-            multiline
-            returnKeyType="send"
-            onSubmitEditing={send}
-          />
-          <TouchableOpacity onPress={send} style={styles.sendBtn} disabled={!text.trim()}>
-            <ArrowUp color={Colors.white} size={23} strokeWidth={2.5} />
-          </TouchableOpacity>
+          <View style={styles.inputShell}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Mensagem..."
+              placeholderTextColor={Colors.textDisabled}
+              style={styles.input}
+              multiline
+              returnKeyType="send"
+              onSubmitEditing={send}
+            />
+            <TouchableOpacity onPress={send} style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]} disabled={!text.trim()}>
+              <ArrowUp color={Colors.white} size={20} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -116,13 +114,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   backBtn: {
     marginRight: Spacing.xs,
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   headerName: {
     fontFamily: FontFamily.bodySemiBold,
@@ -134,24 +136,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textMuted,
   },
-  samePlaceBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
-    backgroundColor: 'rgba(255, 45, 120, 0.12)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 45, 120, 0.2)',
-    paddingVertical: Spacing.xs,
-  },
-  samePlaceText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.sm,
-    color: Colors.secondary,
-  },
   messagesList: {
-    padding: Spacing.xl,
-    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
     flexGrow: 1,
     justifyContent: 'flex-end',
   },
@@ -163,18 +151,18 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   bubble: {
-    maxWidth: '78%',
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    maxWidth: '72%',
+    borderRadius: 22,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   bubbleOther: {
     backgroundColor: Colors.surface,
-    borderBottomLeftRadius: 4,
+    borderBottomLeftRadius: 7,
   },
   bubbleMe: {
     backgroundColor: Colors.secondary,
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: 7,
   },
   bubbleText: {
     fontFamily: FontFamily.body,
@@ -183,32 +171,37 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.md * 1.5,
   },
   inputRow: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    backgroundColor: Colors.background,
+  },
+  inputShell: {
+    minHeight: 44,
+    maxHeight: 128,
+    backgroundColor: Colors.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    paddingLeft: Spacing.lg,
+    paddingRight: 6,
+    paddingVertical: 6,
   },
   input: {
     flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    minHeight: 32,
+    maxHeight: 112,
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.text,
+    paddingVertical: 6,
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: Colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -216,5 +209,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 8,
+  },
+  sendBtnDisabled: {
+    opacity: 0.45,
   },
 });

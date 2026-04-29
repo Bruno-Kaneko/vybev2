@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Bell, Heart, MapPin, MessageCircle, MoreHorizontal, Send } from 'lucide-react-native';
+import { Bell, Heart, MapPin, MessageCircle, Send } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS } from '@/constants/MockData';
-import { Avatar, PostTimer } from '@/components/ui';
+import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import type { Post } from '@/types';
 
@@ -46,9 +46,9 @@ export default function HomeScreen() {
 function HomeHeader({ maxWidth }: { maxWidth: number }) {
   return (
     <View style={[styles.header, { maxWidth }]}>
-      <Text style={styles.logo}>VYBE</Text>
+      <BrandLogo width={118} height={38} />
       <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
-        <Bell color={Colors.white} size={21} strokeWidth={2.2} />
+        <Bell color={Colors.white} size={18} strokeWidth={2.1} />
       </TouchableOpacity>
     </View>
   );
@@ -100,15 +100,11 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
                 <Text style={styles.locationText} numberOfLines={1}>{post.placeName}</Text>
               </View>
             </View>
-            <Text style={styles.username}>@{post.user.username}</Text>
           </View>
         </TouchableOpacity>
 
         <View style={styles.headerRight}>
           <PostTimer expiresAt={post.expiresAt} compact />
-          <TouchableOpacity style={styles.moreButton} activeOpacity={0.75}>
-            <MoreHorizontal color={Colors.textMuted} size={22} strokeWidth={2.1} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -123,7 +119,7 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
               <Heart
                 color={liked ? Colors.secondary : Colors.white}
                 fill={liked ? Colors.secondary : 'transparent'}
-                size={25}
+                size={20}
                 strokeWidth={2.2}
               />
             </TouchableOpacity>
@@ -134,19 +130,19 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
             style={styles.actionButton}
             activeOpacity={0.75}
           >
-            <MessageCircle color={Colors.white} size={25} strokeWidth={2.1} />
+            <MessageCircle color={Colors.white} size={20} strokeWidth={2.1} />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleShare} style={styles.actionButton} activeOpacity={0.75}>
-            <Send color={shared ? Colors.secondary : Colors.white} size={24} strokeWidth={2.1} />
+            <Send color={shared ? Colors.secondary : Colors.white} size={19} strokeWidth={2.1} />
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.postMeta}>
         <Text style={styles.likes}>{likeCount} curtidas</Text>
-        <Text style={styles.caption}>
-          <Text style={styles.captionUser}>{post.user.username} </Text>
+        <Text style={styles.caption} numberOfLines={1}>
+          <Text style={styles.captionUser}>{post.user.displayName} </Text>
           {post.caption}
         </Text>
         <TouchableOpacity onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}>
@@ -174,16 +170,10 @@ const styles = StyleSheet.create({
     paddingTop: Spacing['3xl'],
     paddingBottom: Spacing.md,
   },
-  logo: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.xl,
-    color: Colors.white,
-    letterSpacing: 4,
-  },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
@@ -204,7 +194,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   postHeader: {
-    minHeight: 62,
+    height: 58,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     flexDirection: 'row',
@@ -248,26 +238,14 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textMuted,
   },
-  username: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
-    color: Colors.textDim,
-    marginTop: 2,
-  },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
   },
-  moreButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   postImage: {
     width: '100%',
-    aspectRatio: 4 / 5,
+    aspectRatio: 1,
     backgroundColor: Colors.surface,
   },
   actionsRow: {
@@ -282,8 +260,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionButton: {
-    width: 42,
-    height: 40,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -291,6 +269,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.lg,
     gap: Spacing.xs,
+    minHeight: 92,
   },
   likes: {
     fontFamily: FontFamily.bodySemiBold,

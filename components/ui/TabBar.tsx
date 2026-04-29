@@ -5,15 +5,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, MessageCircle, Plus, Search, User, type LucideIcon } from 'lucide-react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
-import { Badge } from './Badge';
+import { Home, Plus, Search, Store, User, type LucideIcon } from 'lucide-react-native';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants';
 
 const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
   index: { Icon: Home, label: 'Home' },
-  discover: { Icon: Search, label: 'Descobrir' },
+  discover: { Icon: Search, label: 'Buscar' },
   camera: { Icon: Plus, label: '' },
-  'chat/index': { Icon: MessageCircle, label: 'Chat' },
+  store: { Icon: Store, label: 'Loja' },
   profile: { Icon: User, label: 'Perfil' },
 };
 
@@ -54,7 +53,6 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
                 label={iconData.label}
                 isFocused={isFocused}
                 onPress={onPress}
-                badge={route.name === 'chat/index' ? 2 : 0}
               />
             );
           })}
@@ -69,13 +67,11 @@ function TabItem({
   label,
   isFocused,
   onPress,
-  badge,
 }: {
   Icon: LucideIcon;
   label: string;
   isFocused: boolean;
   onPress: () => void;
-  badge?: number;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -94,11 +90,6 @@ function TabItem({
       <Animated.View style={[styles.tabInner, { transform: [{ scale }] }]}>
         <View style={styles.iconWrapper}>
           <Icon color={color} size={23} strokeWidth={isFocused ? 2.6 : 2.1} />
-          {badge ? (
-            <View style={styles.badgeWrapper}>
-              <Badge count={badge} />
-            </View>
-          ) : null}
         </View>
         <Text style={[styles.tabLabel, isFocused && { color: Colors.secondary }]}>
           {label}
@@ -189,11 +180,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
     shadowRadius: 4,
-  },
-  badgeWrapper: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
   },
   cameraTab: {
     flex: 1,

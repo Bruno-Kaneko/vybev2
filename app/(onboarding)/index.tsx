@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gift, MapPin, Timer, Users, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { VybeButton } from '@/components/ui';
+import { BrandLogo, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 
 const SLIDES: Array<{
@@ -210,7 +210,9 @@ function SlideItem({
           },
         ]}
       >
-        <Text style={styles.logo}>VYBE</Text>
+        <View style={styles.logoSpot}>
+          <BrandLogo width={isWide ? 214 : 174} height={isWide ? 66 : 54} />
+        </View>
 
         <View style={[styles.iconBadge, { borderColor: slide.accent, backgroundColor: `${slide.accent}22` }]}>
           <slide.Icon color={slide.accent} size={34} strokeWidth={2.4} />
@@ -266,12 +268,16 @@ const styles = StyleSheet.create({
   content: {
     width: '100%',
   },
-  logo: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.lg,
-    color: Colors.textMuted,
-    letterSpacing: 6,
+  logoSpot: {
+    alignSelf: 'flex-start',
     marginBottom: Spacing['3xl'],
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.lg,
+    backgroundColor: 'rgba(10,10,15,0.22)',
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
   },
   iconBadge: {
     width: 68,

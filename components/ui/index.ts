@@ -4,3 +4,4 @@ export { PostTimer } from './PostTimer';
 export { Badge } from './Badge';
 export { GradientText } from './GradientText';
 export { VybeTabBar } from './TabBar';
+export { BrandLogo } from './BrandLogo';

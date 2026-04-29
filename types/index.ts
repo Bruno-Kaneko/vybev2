@@ -36,6 +36,9 @@ export interface Place {
   name: string;
   address: string;
   category: 'club' | 'bar' | 'event' | 'lounge';
+  followers?: number;
+  tags?: string[];
+  description?: string;
   location: {
     latitude: number;
     longitude: number;

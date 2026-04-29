@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Cloud,
@@ -22,7 +21,7 @@ import {
 } from 'lucide-react-native';
 import Svg, { Circle, Rect, Text as SvgText } from 'react-native-svg';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { VybeButton } from '@/components/ui';
+import { BrandLogo, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 
 type SocialProvider = 'google' | 'icloud' | 'instagram';
@@ -80,16 +79,7 @@ export default function LoginScreen() {
       >
         <View style={[styles.panel, { maxWidth: responsive.formMaxWidth }]}>
           <View style={styles.logoSection}>
-            <LinearGradient
-              colors={Colors.gradientBrand}
-              style={styles.logoGlow}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Text style={styles.logoText}>V</Text>
-            </LinearGradient>
-            <Text style={styles.appName}>VYBE</Text>
-            <Text style={styles.tagline}>Descubra onde esta rolando agora</Text>
+            <BrandLogo width={188} height={58} />
           </View>
 
           <View style={styles.socialSection}>
@@ -278,36 +268,6 @@ const styles = StyleSheet.create({
   logoSection: {
     alignItems: 'center',
     marginBottom: Spacing['3xl'],
-  },
-  logoGlow: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
-    shadowColor: Colors.secondary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-  },
-  logoText: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize['3xl'],
-    color: Colors.white,
-  },
-  appName: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize['2xl'],
-    color: Colors.white,
-    letterSpacing: 6,
-    marginBottom: Spacing.xs,
-  },
-  tagline: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.md,
-    color: Colors.textMuted,
-    textAlign: 'center',
   },
   socialSection: {
     gap: Spacing.sm,

@@ -7,7 +7,9 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  Platform,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import {
@@ -117,8 +119,8 @@ function DiscoverHeader({
   return (
     <View style={[styles.headerShell, { maxWidth }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Descobrir</Text>
-        <Text style={styles.subtitle}>O que esta rolando em SP agora</Text>
+        <Text style={styles.title}>Buscar</Text>
+        <Text style={styles.subtitle}>O que ta rolando agora</Text>
       </View>
 
       <View style={styles.searchWrapper}>
@@ -128,7 +130,7 @@ function DiscoverHeader({
           placeholderTextColor={Colors.textDisabled}
           value={search}
           onChangeText={setSearch}
-          style={styles.searchInput}
+          style={[styles.searchInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
         />
       </View>
 
@@ -178,6 +180,7 @@ function PlaceCard({ place, columns, maxWidth }: { place: Place; columns: number
 
   return (
     <TouchableOpacity
+      onPress={() => router.push({ pathname: '/place/[id]', params: { id: place.id } })}
       style={[
         styles.placeCard,
         columns === 1 ? { maxWidth } : styles.placeCardGrid,
@@ -252,7 +255,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     paddingHorizontal: Spacing.lg,
     height: 48,
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
   searchInput: {
     flex: 1,
@@ -260,6 +263,8 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.text,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 0,
   },
   categoriesList: {
     height: 42,
