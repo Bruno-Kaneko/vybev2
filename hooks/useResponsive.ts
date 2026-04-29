@@ -13,9 +13,9 @@ export function useResponsive() {
     const isTablet = breakpoint === 'tablet';
     const isDesktop = breakpoint === 'desktop';
     const pagePadding = isPhone ? Spacing.xl : Spacing['3xl'];
-    const contentMaxWidth = isDesktop ? 1120 : isTablet ? 760 : width;
-    const formMaxWidth = isPhone ? width : 440;
-    const feedMaxWidth = isDesktop ? 560 : isTablet ? 520 : width;
+    const contentMaxWidth = isDesktop ? 1200 : isTablet ? 840 : width;
+    const formMaxWidth = isPhone ? width : 480;
+    const feedMaxWidth = isDesktop ? 680 : isTablet ? 600 : width;
     const columns = isDesktop ? 3 : isTablet ? 2 : 1;
 
     return {

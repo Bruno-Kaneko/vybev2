@@ -75,7 +75,7 @@ export default function DiscoverScreen() {
             paddingBottom: insets.bottom + 110,
           },
         ]}
-        columnWrapperStyle={responsive.columns > 1 ? styles.columnWrapper : undefined}
+        columnWrapperStyle={responsive.columns > 1 ? [styles.columnWrapper, { maxWidth: responsive.contentMaxWidth, alignSelf: 'center' as const }] : undefined}
         ListHeaderComponent={
           <DiscoverHeader
             search={search}
@@ -223,7 +223,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
-    overflow: 'hidden',
   },
   listContent: {
     width: '100%',

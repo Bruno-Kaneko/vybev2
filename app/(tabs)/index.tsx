@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, Heart, MapPin, MessageCircle, Send } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS } from '@/constants/MockData';
@@ -20,9 +21,10 @@ import type { Post } from '@/types';
 
 export default function HomeScreen() {
   const responsive = useResponsive();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <FlatList
         data={MOCK_POSTS}
         keyExtractor={item => item.id}
@@ -47,9 +49,18 @@ function HomeHeader({ maxWidth }: { maxWidth: number }) {
   return (
     <View style={[styles.header, { maxWidth, alignSelf: 'center', width: '100%' }]}>
       <BrandLogo width={118} height={38} />
-      <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
-        <Bell color={Colors.white} size={18} strokeWidth={2.1} />
-      </TouchableOpacity>
+      <View style={styles.headerActions}>
+        <TouchableOpacity
+          style={styles.iconButton}
+          activeOpacity={0.78}
+          onPress={() => router.push('/(tabs)/chat/index' as any)}
+        >
+          <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
+          <Bell color={Colors.white} size={18} strokeWidth={2.1} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -169,8 +180,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Spacing['3xl'],
+    paddingTop: Spacing['2xl'],
     paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   iconButton: {
     width: 36,
