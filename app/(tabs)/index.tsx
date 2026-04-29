@@ -45,7 +45,7 @@ export default function HomeScreen() {
 
 function HomeHeader({ maxWidth }: { maxWidth: number }) {
   return (
-    <View style={[styles.header, { maxWidth }]}>
+    <View style={[styles.header, { maxWidth, alignSelf: 'center', width: '100%' }]}>
       <BrandLogo width={118} height={38} />
       <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
         <Bell color={Colors.white} size={18} strokeWidth={2.1} />
@@ -84,7 +84,10 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
   const likeCount = post.reactions.heart + (liked ? 1 : 0);
 
   return (
-    <View style={[styles.postCard, { maxWidth }, isPhone && styles.postCardPhone]}>
+    <View style={[
+      styles.postCard,
+      isPhone ? styles.postCardPhone : { maxWidth, alignSelf: 'center', width: '100%' },
+    ]}>
       <View style={styles.postHeader}>
         <TouchableOpacity
           style={styles.authorRow}
@@ -159,7 +162,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   feedContent: {
-    alignItems: 'center',
     gap: Spacing.lg,
   },
   header: {

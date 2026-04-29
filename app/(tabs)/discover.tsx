@@ -183,7 +183,7 @@ function PlaceCard({ place, columns, maxWidth }: { place: Place; columns: number
       onPress={() => router.push({ pathname: '/place/[id]', params: { id: place.id } })}
       style={[
         styles.placeCard,
-        columns === 1 ? { maxWidth } : styles.placeCardGrid,
+        columns === 1 ? { width: '100%' } : styles.placeCardGrid,
       ]}
       activeOpacity={0.85}
     >
@@ -223,12 +223,14 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
+    overflow: 'hidden',
   },
   listContent: {
-    alignItems: 'center',
+    width: '100%',
   },
   headerShell: {
     width: '100%',
+    alignSelf: 'center',
   },
   header: {
     paddingBottom: Spacing.lg,

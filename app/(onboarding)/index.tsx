@@ -66,6 +66,7 @@ export default function OnboardingScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const isLast = currentIndex === SLIDES.length - 1;
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
@@ -85,8 +86,6 @@ export default function OnboardingScreen() {
       router.replace('/(auth)/login');
     }
   };
-
-  const isLast = currentIndex === SLIDES.length - 1;
 
   return (
     <View style={styles.root}>
@@ -111,6 +110,11 @@ export default function OnboardingScreen() {
           />
         ))}
       </ScrollView>
+
+      {/* Logo fixo no canto superior esquerdo */}
+      <View style={[styles.logoFixed, { top: insets.top + 16 }]}>
+        <BrandLogo width={118} height={38} />
+      </View>
 
       <View
         style={[
@@ -142,11 +146,13 @@ export default function OnboardingScreen() {
             style={{ marginTop: Spacing.lg }}
           />
 
-          {!isLast && (
-            <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.skipButton}>
-              <Text style={styles.skipText}>Pular</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            onPress={() => router.replace('/(auth)/login')}
+            style={[styles.skipButton, isLast && { opacity: 0 }]}
+            disabled={isLast}
+          >
+            <Text style={styles.skipText}>Pular</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -210,10 +216,6 @@ function SlideItem({
           },
         ]}
       >
-        <View style={styles.logoSpot}>
-          <BrandLogo width={isWide ? 214 : 174} height={isWide ? 66 : 54} />
-        </View>
-
         <View style={[styles.iconBadge, { borderColor: slide.accent, backgroundColor: `${slide.accent}22` }]}>
           <slide.Icon color={slide.accent} size={34} strokeWidth={2.4} />
         </View>
@@ -268,16 +270,10 @@ const styles = StyleSheet.create({
   content: {
     width: '100%',
   },
-  logoSpot: {
-    alignSelf: 'flex-start',
-    marginBottom: Spacing['3xl'],
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.lg,
-    backgroundColor: 'rgba(10,10,15,0.22)',
-    shadowColor: Colors.secondary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
+  logoFixed: {
+    position: 'absolute',
+    left: Spacing.xl,
+    zIndex: 10,
   },
   iconBadge: {
     width: 68,
