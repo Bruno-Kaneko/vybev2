@@ -1,155 +1,157 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   FlatList,
   Image,
   TouchableOpacity,
-  ViewToken,
   Animated,
+  Share as NativeShare,
 } from 'react-native';
 import { router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { Bell, Heart, MapPin, MessageCircle, MoreHorizontal, Send } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, PostTimer } from '@/components/ui';
+import { useResponsive } from '@/hooks/useResponsive';
 import type { Post } from '@/types';
 
-const { width: W, height: H } = Dimensions.get('window');
-
 export default function HomeScreen() {
-  const insets = useSafeAreaInsets();
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0) {
-        setActiveIndex(viewableItems[0].index ?? 0);
-      }
-    },
-    []
-  );
+  const responsive = useResponsive();
 
   return (
     <View style={styles.root}>
       <FlatList
         data={MOCK_POSTS}
         keyExtractor={item => item.id}
-        pagingEnabled
         showsVerticalScrollIndicator={false}
-        renderItem={({ item, index }) => (
-          <PostCard post={item} isActive={index === activeIndex} insets={insets} />
+        contentContainerStyle={[
+          styles.feedContent,
+          {
+            paddingHorizontal: responsive.isPhone ? 0 : responsive.pagePadding,
+            paddingBottom: 110,
+          },
+        ]}
+        ListHeaderComponent={<HomeHeader maxWidth={responsive.feedMaxWidth} />}
+        renderItem={({ item }) => (
+          <PostCard post={item} maxWidth={responsive.feedMaxWidth} isPhone={responsive.isPhone} />
         )}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
-        snapToInterval={H}
-        decelerationRate="fast"
       />
-
-      {/* Top bar */}
-      <View style={[styles.topBar, { paddingTop: insets.top + Spacing.sm }]}>
-        <Text style={styles.topLogo}>VYBE</Text>
-        <View style={styles.topActions}>
-          <TouchableOpacity style={styles.topBtn}>
-            <Text style={styles.topBtnIcon}>🔔</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
     </View>
   );
 }
 
-function PostCard({ post, isActive, insets }: { post: Post; isActive: boolean; insets: any }) {
-  const [reacted, setReacted] = useState({ fire: false, heart: false });
-  const fireScale = useRef(new Animated.Value(1)).current;
-  const heartScale = useRef(new Animated.Value(1)).current;
+function HomeHeader({ maxWidth }: { maxWidth: number }) {
+  return (
+    <View style={[styles.header, { maxWidth }]}>
+      <Text style={styles.logo}>VYBE</Text>
+      <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
+        <Bell color={Colors.white} size={21} strokeWidth={2.2} />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
-  const handleReaction = (type: 'fire' | 'heart') => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const scale = type === 'fire' ? fireScale : heartScale;
+function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; isPhone: boolean }) {
+  const [liked, setLiked] = useState(false);
+  const [shared, setShared] = useState(false);
+  const likeScale = useState(new Animated.Value(1))[0];
+
+  const handleLike = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.sequence([
-      Animated.spring(scale, { toValue: 1.4, useNativeDriver: true, damping: 4, stiffness: 400 } as any),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 300 } as any),
+      Animated.spring(likeScale, { toValue: 1.24, useNativeDriver: true, damping: 5, stiffness: 380 } as any),
+      Animated.spring(likeScale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 260 } as any),
     ]).start();
-    setReacted(prev => ({ ...prev, [type]: !prev[type] }));
+    setLiked(prev => !prev);
   };
 
+  const handleShare = async () => {
+    Haptics.selectionAsync();
+    setShared(true);
+    try {
+      await NativeShare.share({
+        title: 'VYBE',
+        message: `${post.user.displayName} esta em ${post.placeName}: ${post.caption}`,
+      });
+    } catch {
+      setShared(false);
+    }
+  };
+
+  const likeCount = post.reactions.heart + (liked ? 1 : 0);
+
   return (
-    <View style={[styles.card, { height: H }]}>
-      {/* Background photo */}
-      <Image source={{ uri: post.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-
-      {/* Gradient overlay */}
-      <LinearGradient
-        colors={['rgba(10,10,15,0.15)', 'transparent', 'rgba(10,10,15,0.9)']}
-        style={StyleSheet.absoluteFill}
-        locations={[0, 0.35, 1]}
-      />
-
-      {/* Top: user info + timer */}
-      <View style={[styles.topInfo, { top: insets.top + 72 }]}>
-        <BlurView intensity={20} tint="dark" style={styles.userChip}>
-          <TouchableOpacity
-            style={styles.userChipInner}
-            onPress={() => router.push(`/profile/${post.userId}`)}
-            activeOpacity={0.9}
-          >
-            <Avatar uri={post.user.avatar} size="xs" withGradientBorder />
-            <View>
-              <Text style={styles.username}>{post.user.username}</Text>
-              <Text style={styles.placeName}>📍 {post.placeName}</Text>
+    <View style={[styles.postCard, { maxWidth }, isPhone && styles.postCardPhone]}>
+      <View style={styles.postHeader}>
+        <TouchableOpacity
+          style={styles.authorRow}
+          onPress={() => router.push(`/profile/${post.userId}`)}
+          activeOpacity={0.85}
+        >
+          <Avatar uri={post.user.avatar} size="sm" withGradientBorder />
+          <View style={styles.authorText}>
+            <View style={styles.authorLine}>
+              <Text style={styles.displayName} numberOfLines={1}>{post.user.displayName}</Text>
+              <View style={styles.locationInline}>
+                <MapPin color={Colors.secondary} size={13} strokeWidth={2.4} />
+                <Text style={styles.locationText} numberOfLines={1}>{post.placeName}</Text>
+              </View>
             </View>
+            <Text style={styles.username}>@{post.user.username}</Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.headerRight}>
+          <PostTimer expiresAt={post.expiresAt} compact />
+          <TouchableOpacity style={styles.moreButton} activeOpacity={0.75}>
+            <MoreHorizontal color={Colors.textMuted} size={22} strokeWidth={2.1} />
           </TouchableOpacity>
-        </BlurView>
-        <PostTimer expiresAt={post.expiresAt} />
+        </View>
       </View>
 
-      {/* Bottom: caption + actions */}
-      <View style={[styles.bottomInfo, { paddingBottom: insets.bottom + 80 }]}>
-        <View style={styles.captionRow}>
-          {post.caption ? (
-            <Text style={styles.caption}>{post.caption}</Text>
-          ) : null}
-        </View>
+      <TouchableOpacity onPress={handleLike} activeOpacity={0.95}>
+        <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
+      </TouchableOpacity>
 
-        {/* Action buttons */}
-        <View style={styles.actions}>
-          <Animated.View style={{ transform: [{ scale: fireScale }] }}>
-            <TouchableOpacity onPress={() => handleReaction('fire')} style={styles.actionBtn}>
-              <Text style={styles.actionIcon}>🔥</Text>
-              <Text style={[styles.actionCount, reacted.fire && { color: Colors.secondary }]}>
-                {post.reactions.fire + (reacted.fire ? 1 : 0)}
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-
-          <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-            <TouchableOpacity onPress={() => handleReaction('heart')} style={styles.actionBtn}>
-              <Text style={styles.actionIcon}>❤️</Text>
-              <Text style={[styles.actionCount, reacted.heart && { color: Colors.secondary }]}>
-                {post.reactions.heart + (reacted.heart ? 1 : 0)}
-              </Text>
+      <View style={styles.actionsRow}>
+        <View style={styles.primaryActions}>
+          <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+            <TouchableOpacity onPress={handleLike} style={styles.actionButton} activeOpacity={0.75}>
+              <Heart
+                color={liked ? Colors.secondary : Colors.white}
+                fill={liked ? Colors.secondary : 'transparent'}
+                size={25}
+                strokeWidth={2.2}
+              />
             </TouchableOpacity>
           </Animated.View>
 
           <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => router.push(`/(tabs)/chat/${post.userId}`)}
+            onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+            style={styles.actionButton}
+            activeOpacity={0.75}
           >
-            <Text style={styles.actionIcon}>💬</Text>
-            <Text style={styles.actionCount}>{post.commentCount}</Text>
+            <MessageCircle color={Colors.white} size={25} strokeWidth={2.1} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionBtn}>
-            <Text style={styles.actionIcon}>↑</Text>
-            <Text style={styles.actionCount}>Share</Text>
+          <TouchableOpacity onPress={handleShare} style={styles.actionButton} activeOpacity={0.75}>
+            <Send color={shared ? Colors.secondary : Colors.white} size={24} strokeWidth={2.1} />
           </TouchableOpacity>
         </View>
+      </View>
+
+      <View style={styles.postMeta}>
+        <Text style={styles.likes}>{likeCount} curtidas</Text>
+        <Text style={styles.caption}>
+          <Text style={styles.captionUser}>{post.user.username} </Text>
+          {post.caption}
+        </Text>
+        <TouchableOpacity onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}>
+          <Text style={styles.comments}>Ver todos os {post.commentCount} comentarios</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -160,111 +162,154 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  card: {
-    width: W,
-    overflow: 'hidden',
+  feedContent: {
+    alignItems: 'center',
+    gap: Spacing.lg,
   },
-  topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  header: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.sm,
-    zIndex: 10,
+    paddingTop: Spacing['3xl'],
+    paddingBottom: Spacing.md,
   },
-  topLogo: {
+  logo: {
     fontFamily: FontFamily.heading,
     fontSize: FontSize.xl,
     color: Colors.white,
     letterSpacing: 4,
-    textShadowColor: Colors.secondary,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
   },
-  topActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  topBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  topBtnIcon: {
-    fontSize: 18,
+  postCard: {
+    width: '100%',
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
   },
-  topInfo: {
-    position: 'absolute',
-    left: Spacing.xl,
-    right: Spacing.xl,
+  postCardPhone: {
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    borderRadius: 0,
+  },
+  postHeader: {
+    minHeight: 62,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
   },
-  userChip: {
-    borderRadius: Radius.full,
-    overflow: 'hidden',
-  },
-  userChipInner: {
+  authorRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
   },
-  username: {
+  authorText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  authorLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    minWidth: 0,
+  },
+  displayName: {
+    flexShrink: 1,
     fontFamily: FontFamily.bodySemiBold,
     fontSize: FontSize.sm,
     color: Colors.white,
   },
-  placeName: {
-    fontFamily: FontFamily.body,
+  locationInline: {
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  locationText: {
+    flexShrink: 1,
+    fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.xs,
     color: Colors.textMuted,
   },
-  bottomInfo: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.xl,
+  username: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textDim,
+    marginTop: 2,
   },
-  captionRow: {
-    marginBottom: Spacing.lg,
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  moreButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postImage: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    backgroundColor: Colors.surface,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.sm,
+    paddingTop: Spacing.sm,
+  },
+  primaryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
+    width: 42,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postMeta: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  likes: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.sm,
+    color: Colors.white,
   },
   caption: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.md,
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.text,
+    lineHeight: FontSize.sm * 1.45,
+  },
+  captionUser: {
+    fontFamily: FontFamily.bodySemiBold,
     color: Colors.white,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
-  actions: {
-    flexDirection: 'row',
-    gap: Spacing.xl,
-    alignItems: 'flex-end',
-  },
-  actionBtn: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  actionIcon: {
-    fontSize: 28,
-  },
-  actionCount: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.xs,
-    color: Colors.white,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+  comments: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
   },
 });

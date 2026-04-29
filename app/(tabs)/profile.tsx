@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,23 +7,23 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Grid3X3, MapPin, MessageCircle } from 'lucide-react-native';
+import { Edit3, Grid3X3, MapPin, Settings } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
+import { MOCK_POSTS, MOCK_USERS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 
-export default function ProfileScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+export default function MyProfileScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
-  const user = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
+  const [message, setMessage] = useState('');
+  const user = MOCK_USERS[0];
   const userPosts = MOCK_POSTS.filter(p => p.userId === user.id);
-  const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbGap = Spacing.xs;
+  const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
   return (
@@ -33,15 +33,18 @@ export default function ProfileScreen() {
         styles.content,
         {
           paddingHorizontal: responsive.pagePadding,
-          paddingBottom: insets.bottom + 100,
+          paddingBottom: insets.bottom + 110,
         },
       ]}
       showsVerticalScrollIndicator={false}
     >
       <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft color={Colors.textMuted} size={22} strokeWidth={2.4} />
-        </TouchableOpacity>
+        <View style={styles.topRow}>
+          <Text style={styles.title}>Perfil</Text>
+          <TouchableOpacity style={styles.settingsButton} activeOpacity={0.8} onPress={() => setMessage('Preferencias abertas em breve.')}>
+            <Settings color={Colors.white} size={21} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.hero}>
           <Avatar uri={user.avatar} size="xl" withGradientBorder />
@@ -61,41 +64,46 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.actionsRow}>
-          <VybeButton label="Seguir" onPress={() => {}} style={{ flex: 1 }} />
+          <VybeButton
+            label="Editar perfil"
+            onPress={() => setMessage('Editor de perfil em breve.')}
+            style={{ flex: 1 }}
+          />
           <TouchableOpacity
-            onPress={() => router.push(`/(tabs)/chat/${user.id}`)}
-            style={styles.msgBtn}
+            onPress={() => setMessage('Locais recentes em breve.')}
+            style={styles.mapButton}
+            activeOpacity={0.8}
           >
-            <MessageCircle color={Colors.text} size={19} strokeWidth={2.2} />
-            <Text style={styles.msgBtnText}>Mensagem</Text>
+            <MapPin color={Colors.secondary} size={20} strokeWidth={2.2} />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.postsSection}>
-          <View style={styles.postsHeader}>
-            <Grid3X3 color={Colors.white} size={18} strokeWidth={2.2} />
-            <Text style={styles.sectionTitle}>Posts</Text>
-          </View>
-          <View style={[styles.postsGrid, { gap: thumbGap }]}>
-            {MOCK_POSTS.map(post => (
-              <TouchableOpacity
-                key={post.id}
-                style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}
-                onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
-                activeOpacity={0.85}
-              >
-                <Image source={{ uri: post.imageUrl }} style={styles.postThumbImg} resizeMode="cover" />
-                <LinearGradient
-                  colors={['transparent', 'rgba(10,10,15,0.7)']}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={styles.thumbMeta}>
-                  <MapPin color={Colors.textMuted} size={11} strokeWidth={2.2} />
-                  <Text style={styles.postThumbTimer} numberOfLines={1}>{post.placeName}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+        {message ? <Text style={styles.feedback}>{message}</Text> : null}
+
+        <View style={styles.postsHeader}>
+          <Grid3X3 color={Colors.white} size={18} strokeWidth={2.2} />
+          <Text style={styles.sectionTitle}>Posts</Text>
+        </View>
+
+        <View style={[styles.postsGrid, { gap: thumbGap }]}>
+          {MOCK_POSTS.map(post => (
+            <TouchableOpacity
+              key={post.id}
+              style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}
+              onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+              activeOpacity={0.85}
+            >
+              <Image source={{ uri: post.imageUrl }} style={styles.postThumbImg} resizeMode="cover" />
+              <LinearGradient
+                colors={['transparent', 'rgba(10,10,15,0.72)']}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.thumbMeta}>
+                <MapPin color={Colors.textMuted} size={11} strokeWidth={2.2} />
+                <Text style={styles.postThumbPlace} numberOfLines={1}>{post.placeName}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
     </ScrollView>
@@ -124,12 +132,27 @@ const styles = StyleSheet.create({
   shell: {
     width: '100%',
   },
-  backBtn: {
-    width: 44,
-    height: 44,
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  title: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize['3xl'],
+    color: Colors.white,
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'flex-start',
   },
   hero: {
     alignItems: 'center',
@@ -190,31 +213,29 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-    marginBottom: Spacing['2xl'],
+    marginBottom: Spacing.md,
   },
-  msgBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: Radius.full,
+  mapButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 1.5,
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: Spacing.xs,
   },
-  msgBtnText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.md,
-    color: Colors.text,
-  },
-  postsSection: {
-    width: '100%',
+  feedback: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.secondary,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
   },
   postsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+    marginTop: Spacing.md,
     marginBottom: Spacing.md,
   },
   sectionTitle: {
@@ -244,7 +265,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
   },
-  postThumbTimer: {
+  postThumbPlace: {
     flex: 1,
     fontFamily: FontFamily.body,
     fontSize: 9,

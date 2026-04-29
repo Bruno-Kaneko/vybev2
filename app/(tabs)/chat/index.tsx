@@ -2,35 +2,44 @@ import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MessageCircle } from 'lucide-react-native';
 
-import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
+import { Colors, FontFamily, FontSize, Spacing } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
 import { Avatar, Badge } from '@/components/ui';
+import { useResponsive } from '@/hooks/useResponsive';
 import type { Chat } from '@/types';
 
 export default function ChatListScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsive();
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Mensagens</Text>
-      </View>
-
       <FlatList
         data={MOCK_CHATS}
         keyExtractor={item => item.id}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 90, paddingHorizontal: Spacing.xl }}
-        renderItem={({ item, index }) => (
-          <View>
-            <ChatRow chat={item} />
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.listContent,
+          {
+            paddingHorizontal: responsive.pagePadding,
+            paddingBottom: insets.bottom + 110,
+          },
+        ]}
+        ListHeaderComponent={
+          <View style={[styles.header, { maxWidth: responsive.contentMaxWidth }]}>
+            <Text style={styles.title}>Mensagens</Text>
           </View>
+        }
+        renderItem={({ item }) => (
+          <ChatRow chat={item} maxWidth={responsive.contentMaxWidth} />
         )}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>💬</Text>
+          <View style={[styles.empty, { maxWidth: responsive.contentMaxWidth }]}>
+            <MessageCircle color={Colors.textMuted} size={54} strokeWidth={1.8} />
             <Text style={styles.emptyTitle}>Nenhuma mensagem ainda</Text>
-            <Text style={styles.emptySub}>Converse com quem está na mesma festa!</Text>
+            <Text style={styles.emptySub}>Converse com quem esta na mesma festa.</Text>
           </View>
         }
       />
@@ -38,7 +47,7 @@ export default function ChatListScreen() {
   );
 }
 
-function ChatRow({ chat }: { chat: Chat }) {
+function ChatRow({ chat, maxWidth }: { chat: Chat; maxWidth: number }) {
   const other = chat.participants[0];
   const timeAgo = chat.lastMessageAt
     ? formatTimeAgo(chat.lastMessageAt)
@@ -46,7 +55,7 @@ function ChatRow({ chat }: { chat: Chat }) {
 
   return (
     <TouchableOpacity
-      style={styles.chatRow}
+      style={[styles.chatRow, { maxWidth }]}
       onPress={() => router.push(`/(tabs)/chat/${other.id}`)}
       activeOpacity={0.8}
     >
@@ -87,8 +96,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  listContent: {
+    alignItems: 'center',
+  },
   header: {
-    paddingHorizontal: Spacing.xl,
+    width: '100%',
     paddingBottom: Spacing.lg,
     paddingTop: Spacing.md,
   },
@@ -98,6 +110,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   chatRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: Spacing.md,
@@ -121,14 +134,17 @@ const styles = StyleSheet.create({
   },
   chatInfo: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   chatTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
   },
   chatName: {
+    flex: 1,
     fontFamily: FontFamily.bodySemiBold,
     fontSize: FontSize.md,
     color: Colors.white,
@@ -151,12 +167,10 @@ const styles = StyleSheet.create({
     marginRight: Spacing.sm,
   },
   empty: {
+    width: '100%',
     alignItems: 'center',
     paddingTop: 80,
     gap: Spacing.md,
-  },
-  emptyEmoji: {
-    fontSize: 56,
   },
   emptyTitle: {
     fontFamily: FontFamily.headingMedium,

@@ -4,8 +4,8 @@ const NOW = Date.now();
 const HOUR = 3600 * 1000;
 
 export const MOCK_USERS: User[] = [
-  { id: '1', username: 'ana_silva', displayName: 'Ana Silva', avatar: 'https://i.pravatar.cc/150?img=47', bio: 'São Paulo by night 🌙', points: 1240, followers: 892, following: 312, createdAt: NOW - 90 * 24 * HOUR },
-  { id: '2', username: 'pedro_fest', displayName: 'Pedro Ferreira', avatar: 'https://i.pravatar.cc/150?img=12', bio: 'Sempre rolando 🔥', points: 780, followers: 541, following: 200, createdAt: NOW - 60 * 24 * HOUR },
+  { id: '1', username: 'ana_silva', displayName: 'Ana Silva', avatar: 'https://i.pravatar.cc/150?img=47', bio: 'São Paulo by night', points: 1240, followers: 892, following: 312, createdAt: NOW - 90 * 24 * HOUR },
+  { id: '2', username: 'pedro_fest', displayName: 'Pedro Ferreira', avatar: 'https://i.pravatar.cc/150?img=12', bio: 'Sempre rolando', points: 780, followers: 541, following: 200, createdAt: NOW - 60 * 24 * HOUR },
   { id: '3', username: 'julia_night', displayName: 'Julia Costa', avatar: 'https://i.pravatar.cc/150?img=32', bio: 'Curtindo a vida', points: 2100, followers: 1203, following: 445, createdAt: NOW - 120 * 24 * HOUR },
   { id: '4', username: 'rafael_vybe', displayName: 'Rafael Santos', avatar: 'https://i.pravatar.cc/150?img=8', bio: 'DJ de fim de semana', points: 650, followers: 320, following: 180, createdAt: NOW - 30 * 24 * HOUR },
 ];
@@ -16,7 +16,7 @@ export const MOCK_POSTS: Post[] = [
     userId: '1',
     user: MOCK_USERS[0],
     imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80',
-    caption: 'A night não para! 🔥',
+    caption: 'A night não para!',
     placeName: 'Club Fama',
     placeId: 'place1',
     location: { latitude: -23.561, longitude: -46.656 },
@@ -30,7 +30,7 @@ export const MOCK_POSTS: Post[] = [
     userId: '2',
     user: MOCK_USERS[1],
     imageUrl: 'https://images.unsplash.com/photo-1545128485-c400e7702796?w=600&q=80',
-    caption: 'Quem tá aqui? 🙌',
+    caption: 'Quem tá aqui?',
     placeName: 'Bar do Victor',
     placeId: 'place2',
     location: { latitude: -23.558, longitude: -46.660 },
@@ -44,7 +44,7 @@ export const MOCK_POSTS: Post[] = [
     userId: '3',
     user: MOCK_USERS[2],
     imageUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&q=80',
-    caption: 'Esse DJ tá demais 🎧',
+    caption: 'Esse DJ tá demais',
     placeName: 'D-Edge',
     placeId: 'place3',
     location: { latitude: -23.545, longitude: -46.643 },
@@ -58,7 +58,7 @@ export const MOCK_POSTS: Post[] = [
     userId: '4',
     user: MOCK_USERS[3],
     imageUrl: 'https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=600&q=80',
-    caption: 'Sextou! 🎉',
+    caption: 'Sextou!',
     placeName: 'Outs Club',
     placeId: 'place4',
     location: { latitude: -23.572, longitude: -46.648 },

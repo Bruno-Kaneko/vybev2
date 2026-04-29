@@ -1,4 +1,4 @@
-// VYBE Color System — based on official brand palette
+// VYBE Color System - based on official brand palette
 export const Colors = {
   // Backgrounds
   background: '#0A0A0A',
@@ -6,19 +6,19 @@ export const Colors = {
   surfaceElevated: '#1C1C1C',
   border: '#222222',
 
-  // Primary — Purple
+  // Primary - Purple
   primary: '#9B5DE5',
   primaryShade: '#B89AF5',      // lighter lavender (Primary Shade)
   primaryDim: '#7A3FC0',
   primaryGlow: 'rgba(155, 93, 229, 0.35)',
 
-  // Secondary — Hot Pink
+  // Secondary - Hot Pink
   secondary: '#F43F8B',
   secondaryShade: '#C0145A',    // deep magenta (Secondary Shade)
   secondaryDim: '#D4307A',
   secondaryGlow: 'rgba(244, 63, 139, 0.35)',
 
-  // Accent — White (used for highlights/icons)
+  // Accent - White (used for highlights/icons)
   accent: '#FFFFFF',
 
   // Semantic

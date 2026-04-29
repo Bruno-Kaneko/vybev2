@@ -4,14 +4,17 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Camera, Clock3, ImagePlus, MapPin, Send, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { VybeButton } from '@/components/ui';
+import { useResponsive } from '@/hooks/useResponsive';
 import type { TimerDuration } from '@/types';
 
 const TIMER_OPTIONS: TimerDuration[] = [2, 4, 6];
 
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsive();
   const [image, setImage] = useState<string | null>(null);
   const [timer, setTimer] = useState<TimerDuration>(4);
   const [loading, setLoading] = useState(false);
@@ -42,7 +45,6 @@ export default function CameraScreen() {
   const handlePost = async () => {
     if (!image) return;
     setLoading(true);
-    // TODO: upload to Firebase + create post
     await new Promise(r => setTimeout(r, 1000));
     setLoading(false);
     router.replace('/(tabs)');
@@ -51,93 +53,111 @@ export default function CameraScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingHorizontal: responsive.pagePadding,
+            paddingBottom: insets.bottom + 110,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>✕</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Novo Post</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        {/* Image picker */}
-        <TouchableOpacity onPress={pickImage} style={styles.imagePicker} activeOpacity={0.9}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Text style={styles.placeholderEmoji}>📷</Text>
-              <Text style={styles.placeholderText}>Toque para escolher foto</Text>
-              <Text style={styles.placeholderSub}>ou use a câmera abaixo</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        {/* Camera button */}
-        <View style={styles.cameraRow}>
-          <TouchableOpacity onPress={takePhoto} style={styles.cameraBtn}>
-            <Text style={styles.cameraBtnIcon}>📸</Text>
-            <Text style={styles.cameraBtnLabel}>Câmera</Text>
-          </TouchableOpacity>
-          {image && (
-            <TouchableOpacity onPress={() => setImage(null)} style={styles.clearBtn}>
-              <Text style={styles.clearBtnText}>Trocar foto</Text>
+        <View style={[styles.shell, { maxWidth: responsive.formMaxWidth }]}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <X color={Colors.textMuted} size={20} strokeWidth={2.4} />
             </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Timer selector */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⏳ Quanto tempo dura?</Text>
-          <View style={styles.timerRow}>
-            {TIMER_OPTIONS.map(t => (
-              <TouchableOpacity
-                key={t}
-                onPress={() => setTimer(t)}
-                style={[styles.timerPill, timer === t && styles.timerPillActive]}
-              >
-                {timer === t ? (
-                  <LinearGradient
-                    colors={Colors.gradientBrand}
-                    style={StyleSheet.absoluteFill}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  />
-                ) : null}
-                <Text style={[styles.timerText, timer === t && { color: Colors.white }]}>
-                  {t}h
-                </Text>
-              </TouchableOpacity>
-            ))}
+            <Text style={styles.title}>Novo Post</Text>
+            <View style={{ width: 36 }} />
           </View>
-          <Text style={styles.timerHint}>Post desaparece em {timer} horas</Text>
-        </View>
 
-        {/* Location */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📍 Localização</Text>
-          <View style={styles.locationCard}>
-            <Text style={styles.locationIcon}>📍</Text>
-            <View>
-              <Text style={styles.locationName}>Detectando localização...</Text>
-              <Text style={styles.locationSub}>Toque para alterar</Text>
+          <TouchableOpacity onPress={pickImage} style={styles.imagePicker} activeOpacity={0.9}>
+            {image ? (
+              <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <View style={styles.placeholderIcon}>
+                  <ImagePlus color={Colors.secondary} size={40} strokeWidth={1.9} />
+                </View>
+                <Text style={styles.placeholderText}>Toque para escolher foto</Text>
+                <Text style={styles.placeholderSub}>ou use a camera abaixo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.cameraRow}>
+            <TouchableOpacity onPress={takePhoto} style={styles.cameraBtn}>
+              <Camera color={Colors.text} size={18} strokeWidth={2.2} />
+              <Text style={styles.cameraBtnLabel}>Camera</Text>
+            </TouchableOpacity>
+            {image && (
+              <TouchableOpacity onPress={() => setImage(null)} style={styles.clearBtn}>
+                <Text style={styles.clearBtnText}>Trocar foto</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Clock3 color={Colors.secondary} size={20} strokeWidth={2.2} />
+              <Text style={styles.sectionTitle}>Quanto tempo dura?</Text>
+            </View>
+            <View style={styles.timerRow}>
+              {TIMER_OPTIONS.map(t => (
+                <TouchableOpacity
+                  key={t}
+                  onPress={() => setTimer(t)}
+                  style={[styles.timerPill, timer === t && styles.timerPillActive]}
+                >
+                  {timer === t ? (
+                    <LinearGradient
+                      colors={Colors.gradientBrand}
+                      style={StyleSheet.absoluteFill}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    />
+                  ) : null}
+                  <Text style={[styles.timerText, timer === t && { color: Colors.white }]}>
+                    {t}h
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.timerHint}>Post desaparece em {timer} horas</Text>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <MapPin color={Colors.secondary} size={20} strokeWidth={2.2} />
+              <Text style={styles.sectionTitle}>Localizacao</Text>
+            </View>
+            <View style={styles.locationCard}>
+              <View style={styles.locationIcon}>
+                <MapPin color={Colors.secondary} size={22} strokeWidth={2.2} />
+              </View>
+              <View>
+                <Text style={styles.locationName}>Detectando localizacao...</Text>
+                <Text style={styles.locationSub}>Toque para alterar</Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Post button */}
-        <View style={styles.postSection}>
-          <VybeButton
-            label={image ? '🚀 Publicar agora' : 'Escolha uma foto primeiro'}
-            onPress={handlePost}
-            loading={loading}
-            disabled={!image}
-            fullWidth
-            size="lg"
-          />
+          <View style={styles.postSection}>
+            <VybeButton
+              label={image ? 'Publicar agora' : 'Escolha uma foto primeiro'}
+              onPress={handlePost}
+              loading={loading}
+              disabled={!image}
+              fullWidth
+              size="lg"
+            />
+            {image ? (
+              <View style={styles.readyRow}>
+                <Send color={Colors.secondary} size={16} strokeWidth={2.2} />
+                <Text style={styles.readyText}>Tudo pronto para publicar</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -149,11 +169,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  scrollContent: {
+    alignItems: 'center',
+  },
+  shell: {
+    width: '100%',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.lg,
   },
   backBtn: {
@@ -164,19 +189,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.md,
-    color: Colors.textMuted,
-  },
   title: {
     fontFamily: FontFamily.heading,
     fontSize: FontSize.xl,
     color: Colors.white,
   },
   imagePicker: {
-    marginHorizontal: Spacing.xl,
-    height: 340,
+    width: '100%',
+    aspectRatio: 9 / 12,
+    maxHeight: 520,
     borderRadius: Radius.xl,
     overflow: 'hidden',
     backgroundColor: Colors.surface,
@@ -191,25 +212,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
+    padding: Spacing.xl,
   },
-  placeholderEmoji: {
-    fontSize: 48,
+  placeholderIcon: {
+    width: 78,
+    height: 78,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceElevated,
     marginBottom: Spacing.xs,
   },
   placeholderText: {
     fontFamily: FontFamily.headingMedium,
     fontSize: FontSize.lg,
     color: Colors.textMuted,
+    textAlign: 'center',
   },
   placeholderSub: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textDisabled,
+    textAlign: 'center',
   },
   cameraRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
     gap: Spacing.md,
     marginTop: Spacing.md,
   },
@@ -223,9 +253,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  cameraBtnIcon: {
-    fontSize: 18,
   },
   cameraBtnLabel: {
     fontFamily: FontFamily.bodyMedium,
@@ -242,9 +269,13 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   section: {
-    paddingHorizontal: Spacing.xl,
     marginTop: Spacing['2xl'],
     gap: Spacing.md,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   sectionTitle: {
     fontFamily: FontFamily.headingMedium,
@@ -291,7 +322,12 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
   },
   locationIcon: {
-    fontSize: 24,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   locationName: {
     fontFamily: FontFamily.bodyMedium,
@@ -304,7 +340,18 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   postSection: {
-    paddingHorizontal: Spacing.xl,
     marginTop: Spacing['3xl'],
+  },
+  readyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.md,
+  },
+  readyText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
   },
 });

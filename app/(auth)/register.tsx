@@ -10,14 +10,16 @@ import {
   ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft } from 'lucide-react-native';
 
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { VybeButton } from '@/components/ui';
+import { useResponsive } from '@/hooks/useResponsive';
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsive();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +27,6 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     setLoading(true);
-    // TODO: Firebase auth create user
     await new Promise(r => setTimeout(r, 800));
     setLoading(false);
     router.replace('/(tabs)');
@@ -37,77 +38,84 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }]}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: insets.top + Spacing.xl,
+            paddingBottom: insets.bottom + Spacing.xl,
+            paddingHorizontal: responsive.pagePadding,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Back button */}
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Voltar</Text>
-        </TouchableOpacity>
+        <View style={[styles.panel, { maxWidth: responsive.formMaxWidth }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ChevronLeft color={Colors.textMuted} size={20} strokeWidth={2.4} />
+            <Text style={styles.backText}>Voltar</Text>
+          </TouchableOpacity>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Criar conta</Text>
-          <Text style={styles.subtitle}>Junte-se à festa</Text>
-        </View>
-
-        {/* Form */}
-        <View style={styles.form}>
-          <View>
-            <Text style={styles.label}>Como quer ser chamado?</Text>
-            <TextInput
-              placeholder="@username"
-              placeholderTextColor={Colors.textDisabled}
-              value={username}
-              onChangeText={t => setUsername(t.replace(/\s/g, '').toLowerCase())}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={styles.input}
-            />
-            <Text style={styles.hint}>Seu @ aparece para outras pessoas</Text>
+          <View style={styles.header}>
+            <Text style={styles.title}>Criar conta</Text>
+            <Text style={styles.subtitle}>Junte-se a festa</Text>
           </View>
 
-          <View>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              placeholder="seuemail@exemplo.com"
-              placeholderTextColor={Colors.textDisabled}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
+          <View style={styles.form}>
+            <View>
+              <Text style={styles.label}>Como quer ser chamado?</Text>
+              <TextInput
+                placeholder="@username"
+                placeholderTextColor={Colors.textDisabled}
+                value={username}
+                onChangeText={t => setUsername(t.replace(/\s/g, '').toLowerCase())}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.input}
+              />
+              <Text style={styles.hint}>Seu @ aparece para outras pessoas</Text>
+            </View>
+
+            <View>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                placeholder="seuemail@exemplo.com"
+                placeholderTextColor={Colors.textDisabled}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={styles.input}
+              />
+            </View>
+
+            <View>
+              <Text style={styles.label}>Senha</Text>
+              <TextInput
+                placeholder="Minimo 8 caracteres"
+                placeholderTextColor={Colors.textDisabled}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                style={styles.input}
+              />
+            </View>
+
+            <VybeButton
+              label="Criar minha conta"
+              onPress={handleRegister}
+              loading={loading}
+              fullWidth
+              size="lg"
+              style={{ marginTop: Spacing.md }}
             />
+
+            <Text style={styles.terms}>
+              Ao criar conta voce concorda com os{' '}
+              <Text style={styles.termsLink}>Termos de Uso</Text>
+              {' '}e a{' '}
+              <Text style={styles.termsLink}>Politica de Privacidade</Text>
+            </Text>
           </View>
-
-          <View>
-            <Text style={styles.label}>Senha</Text>
-            <TextInput
-              placeholder="Mínimo 8 caracteres"
-              placeholderTextColor={Colors.textDisabled}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              style={styles.input}
-            />
-          </View>
-
-          <VybeButton
-            label="Criar minha conta"
-            onPress={handleRegister}
-            loading={loading}
-            fullWidth
-            size="lg"
-            style={{ marginTop: Spacing.md }}
-          />
-
-          <Text style={styles.terms}>
-            Ao criar conta você concorda com os{' '}
-            <Text style={styles.termsLink}>Termos de Uso</Text>
-            {' '}e a{' '}
-            <Text style={styles.termsLink}>Política de Privacidade</Text>
-          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -121,9 +129,15 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: Spacing['3xl'],
+    alignItems: 'center',
+  },
+  panel: {
+    width: '100%',
   },
   backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
     marginBottom: Spacing['2xl'],
     alignSelf: 'flex-start',
   },

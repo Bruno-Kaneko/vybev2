@@ -1,23 +1,25 @@
 import React, { useRef } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform, Animated } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Animated } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Home, MessageCircle, Plus, Search, User, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
 import { Badge } from './Badge';
 
-const ICONS: Record<string, { active: string; inactive: string; label: string }> = {
-  index: { active: '🏠', inactive: '🏠', label: 'Home' },
-  discover: { active: '🗺️', inactive: '🗺️', label: 'Descobrir' },
-  camera: { active: '📷', inactive: '📷', label: '' },
-  chat: { active: '💬', inactive: '💬', label: 'Chat' },
-  store: { active: '🏪', inactive: '🏪', label: 'Loja' },
+const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
+  index: { Icon: Home, label: 'Home' },
+  discover: { Icon: Search, label: 'Descobrir' },
+  camera: { Icon: Plus, label: '' },
+  'chat/index': { Icon: MessageCircle, label: 'Chat' },
+  profile: { Icon: User, label: 'Perfil' },
 };
 
 export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const visibleRoutes = state.routes.filter(route => (descriptors[route.key].options as any).href !== null);
 
   return (
     <View style={[styles.wrapper, { paddingBottom: insets.bottom }]}>
@@ -27,10 +29,11 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.tabRow}>
-          {state.routes.map((route, index) => {
-            const isFocused = state.index === index;
+          {visibleRoutes.map(route => {
+            const realIndex = state.routes.findIndex(item => item.key === route.key);
+            const isFocused = state.index === realIndex;
             const isCamera = route.name === 'camera';
-            const iconData = ICONS[route.name] ?? { active: '●', inactive: '○', label: route.name };
+            const iconData = ICONS[route.name] ?? ICONS.index;
 
             const onPress = () => {
               Haptics.selectionAsync();
@@ -41,17 +44,17 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
             };
 
             if (isCamera) {
-              return <CameraTab key={route.key} onPress={onPress} />;
+              return <CameraTab key={route.key} onPress={onPress} Icon={iconData.Icon} />;
             }
 
             return (
               <TabItem
                 key={route.key}
-                icon={isFocused ? iconData.active : iconData.inactive}
+                Icon={iconData.Icon}
                 label={iconData.label}
                 isFocused={isFocused}
                 onPress={onPress}
-                badge={route.name === 'chat' ? 2 : 0}
+                badge={route.name === 'chat/index' ? 2 : 0}
               />
             );
           })}
@@ -61,7 +64,19 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
   );
 }
 
-function TabItem({ icon, label, isFocused, onPress, badge }: { icon: string; label: string; isFocused: boolean; onPress: () => void; badge?: number }) {
+function TabItem({
+  Icon,
+  label,
+  isFocused,
+  onPress,
+  badge,
+}: {
+  Icon: LucideIcon;
+  label: string;
+  isFocused: boolean;
+  onPress: () => void;
+  badge?: number;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePress = () => {
@@ -72,29 +87,29 @@ function TabItem({ icon, label, isFocused, onPress, badge }: { icon: string; lab
     onPress();
   };
 
+  const color = isFocused ? Colors.secondary : Colors.textDisabled;
+
   return (
     <TouchableOpacity onPress={handlePress} style={styles.tab} activeOpacity={1}>
       <Animated.View style={[styles.tabInner, { transform: [{ scale }] }]}>
         <View style={styles.iconWrapper}>
-          <Text style={styles.tabIcon}>{icon}</Text>
+          <Icon color={color} size={23} strokeWidth={isFocused ? 2.6 : 2.1} />
           {badge ? (
             <View style={styles.badgeWrapper}>
               <Badge count={badge} />
             </View>
           ) : null}
         </View>
-        {label ? (
-          <Text style={[styles.tabLabel, isFocused && { color: Colors.secondary }]}>
-            {label}
-          </Text>
-        ) : null}
+        <Text style={[styles.tabLabel, isFocused && { color: Colors.secondary }]}>
+          {label}
+        </Text>
         {isFocused && <View style={styles.activeDot} />}
       </Animated.View>
     </TouchableOpacity>
   );
 }
 
-function CameraTab({ onPress }: { onPress: () => void }) {
+function CameraTab({ onPress, Icon }: { onPress: () => void; Icon: LucideIcon }) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePress = () => {
@@ -114,7 +129,7 @@ function CameraTab({ onPress }: { onPress: () => void }) {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <Text style={styles.cameraIcon}>+</Text>
+          <Icon color={Colors.white} size={30} strokeWidth={2.7} />
         </LinearGradient>
       </Animated.View>
     </TouchableOpacity>
@@ -127,8 +142,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    alignItems: 'center',
   },
   blur: {
+    width: '100%',
+    maxWidth: 720,
     overflow: 'hidden',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',
@@ -136,30 +154,31 @@ const styles = StyleSheet.create({
   tabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 60,
+    height: 62,
     paddingHorizontal: Spacing.md,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 60,
+    height: 62,
   },
   tabInner: {
+    minWidth: 54,
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
   },
   iconWrapper: {
     position: 'relative',
-  },
-  tabIcon: {
-    fontSize: 22,
+    width: 28,
+    height: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabLabel: {
     fontFamily: FontFamily.body,
     fontSize: 9,
     color: Colors.textDisabled,
-    letterSpacing: 0.3,
   },
   activeDot: {
     width: 4,
@@ -173,19 +192,19 @@ const styles = StyleSheet.create({
   },
   badgeWrapper: {
     position: 'absolute',
-    top: -4,
+    top: -8,
     right: -8,
   },
   cameraTab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 60,
+    height: 62,
     marginBottom: 12,
   },
   cameraBtn: {
-    width: 52,
-    height: 52,
+    width: 54,
+    height: 54,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -194,12 +213,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.6,
     shadowRadius: 12,
     elevation: 8,
-  },
-  cameraIcon: {
-    fontFamily: FontFamily.heading,
-    fontSize: 28,
-    color: Colors.white,
-    lineHeight: 32,
-    marginTop: -2,
   },
 });
