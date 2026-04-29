@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Share as NativeShare,
   Modal,
   Platform,
+  PanResponder,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -83,12 +85,60 @@ function MessagesDrawer({
   onClose: () => void;
   insets: { bottom: number; top: number };
 }) {
+  const { height: SCREEN_H } = useWindowDimensions();
+  const SNAP_HALF = SCREEN_H * 0.62;
+  const SNAP_FULL = SCREEN_H;
+
+  const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
+  const currentH = useRef(SNAP_HALF);
+  const snapHalfRef = useRef(SNAP_HALF);
+  const snapFullRef = useRef(SNAP_FULL);
+
+  useEffect(() => {
+    snapHalfRef.current = SNAP_HALF;
+    snapFullRef.current = SNAP_FULL;
+  }, [SNAP_HALF, SNAP_FULL]);
+
+  useEffect(() => {
+    if (visible) {
+      heightAnim.setValue(snapHalfRef.current);
+      currentH.current = snapHalfRef.current;
+    }
+  }, [visible]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderMove: (_, g) => {
+        const next = currentH.current - g.dy;
+        heightAnim.setValue(Math.max(180, Math.min(snapFullRef.current, next)));
+      },
+      onPanResponderRelease: (_, g) => {
+        const next = currentH.current - g.dy;
+        const mid = (snapHalfRef.current + snapFullRef.current) / 2;
+        if (g.vy < -0.5 || next > mid) {
+          Animated.spring(heightAnim, { toValue: snapFullRef.current, useNativeDriver: false, damping: 18, stiffness: 180 } as any).start();
+          currentH.current = snapFullRef.current;
+        } else if (g.vy > 0.5 || next < snapHalfRef.current * 0.55) {
+          onClose();
+          currentH.current = snapHalfRef.current;
+        } else {
+          Animated.spring(heightAnim, { toValue: snapHalfRef.current, useNativeDriver: false, damping: 18, stiffness: 180 } as any).start();
+          currentH.current = snapHalfRef.current;
+        }
+      },
+    })
+  ).current;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.drawerContainer}>
         <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
-        <View style={[styles.drawerSheet, { paddingBottom: insets.bottom + Spacing.xl }]}>
-          <View style={styles.drawerHandle} />
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
+          <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
+            <View style={styles.drawerHandle} />
+          </View>
           <View style={styles.drawerHeader}>
             <Text style={styles.drawerTitle}>Mensagens</Text>
             <TouchableOpacity onPress={onClose} style={styles.drawerClose}>
@@ -107,7 +157,7 @@ function MessagesDrawer({
               </View>
             }
           />
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -408,16 +458,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
-    maxHeight: '85%',
-    paddingTop: Spacing.sm,
+    overflow: 'hidden',
+  },
+  drawerHandleArea: {
+    alignItems: 'center',
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+    paddingHorizontal: Spacing['3xl'],
   },
   drawerHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.border,
-    alignSelf: 'center',
-    marginBottom: Spacing.md,
   },
   drawerHeader: {
     flexDirection: 'row',
