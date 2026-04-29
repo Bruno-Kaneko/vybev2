@@ -5,14 +5,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, MessageCircle, Plus, Search, Store, User, type LucideIcon } from 'lucide-react-native';
+import { Home, Plus, Search, Store, User, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants';
 
 const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
   index: { Icon: Home, label: 'Home' },
   discover: { Icon: Search, label: 'Buscar' },
   camera: { Icon: Plus, label: '' },
-  'chat/index': { Icon: MessageCircle, label: 'Chat' },
   store: { Icon: Store, label: 'Loja' },
   profile: { Icon: User, label: 'Perfil' },
 };
@@ -33,7 +32,8 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
             const realIndex = state.routes.findIndex(item => item.key === route.key);
             const isFocused = state.index === realIndex;
             const isCamera = route.name === 'camera';
-            const iconData = ICONS[route.name] ?? ICONS.index;
+            const iconData = ICONS[route.name];
+            if (!iconData) return null;
 
             const onPress = () => {
               Haptics.selectionAsync();
