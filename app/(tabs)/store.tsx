@@ -80,9 +80,9 @@ function RewardCard({ reward, userPoints, maxWidth }: { reward: Reward; userPoin
         <Icon color={canRedeem ? Colors.gold : Colors.textMuted} size={24} strokeWidth={2.2} />
       </View>
       <View style={styles.rewardInfo}>
-        <Text style={styles.rewardTitle}>{reward.title}</Text>
-        <Text style={styles.rewardDesc}>{reward.description}</Text>
-        <Text style={styles.partner}>{reward.partnerName}</Text>
+        <Text style={styles.rewardTitle} numberOfLines={1}>{reward.title}</Text>
+        <Text style={styles.rewardDesc} numberOfLines={1}>{reward.description}</Text>
+        <Text style={styles.partner} numberOfLines={1}>{reward.partnerName}</Text>
       </View>
       <View style={styles.costPill}>
         <Text style={styles.costText}>{reward.pointsCost}</Text>
@@ -170,13 +170,15 @@ const styles = StyleSheet.create({
   },
   rewardCard: {
     width: '100%',
+    minHeight: 76,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
     gap: Spacing.md,
     marginBottom: Spacing.md,
   },
@@ -184,12 +186,13 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   rewardIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.surfaceElevated,
+    flexShrink: 0,
   },
   rewardInfo: {
     flex: 1,
@@ -213,14 +216,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   costPill: {
+    minWidth: 54,
     borderRadius: Radius.full,
     backgroundColor: Colors.goldGlow,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    flexShrink: 0,
   },
   costText: {
     fontFamily: FontFamily.headingMedium,
     fontSize: FontSize.sm,
     color: Colors.gold,
+    textAlign: 'center',
   },
 });

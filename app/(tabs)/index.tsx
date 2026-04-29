@@ -86,7 +86,7 @@ function MessagesDrawer({
   insets: { bottom: number; top: number };
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
-  const SNAP_HALF = SCREEN_H * 0.62;
+  const SNAP_HALF = Math.min(348, SCREEN_H * 0.52);
   const SNAP_FULL = SCREEN_H;
 
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
@@ -146,7 +146,7 @@ function MessagesDrawer({
             </TouchableOpacity>
           </View>
           <FlatList
-            data={MOCK_CHATS}
+            data={MOCK_CHATS.slice(0, 3)}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => <DrawerChatRow chat={item} onClose={onClose} />}
