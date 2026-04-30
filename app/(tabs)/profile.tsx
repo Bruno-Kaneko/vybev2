@@ -74,26 +74,31 @@ export default function MyProfileScreen() {
     setMessage('');
 
     try {
-      const ext = uri.split('.').pop() ?? 'jpg';
+      const ext = (uri.split('.').pop() ?? 'jpg').toLowerCase();
+      const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
       const fileName = `${user!.id}/avatar.${ext}`;
 
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const arrayBuffer = await blob.arrayBuffer();
+      const blob: Blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => resolve(xhr.response);
+        xhr.onerror = () => reject(new Error('Falha ao ler imagem'));
+        xhr.responseType = 'blob';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+      });
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, arrayBuffer, { contentType: `image/${ext}`, upsert: true });
+        .upload(fileName, blob, { contentType: mimeType, upsert: true });
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-
       await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
       setLocalAvatar(publicUrl);
       setMessage('Foto atualizada!');
-    } catch {
-      setMessage('Erro ao enviar foto. Tente de novo.');
+    } catch (e: any) {
+      setMessage(e?.message ?? 'Erro ao enviar foto. Tente de novo.');
     } finally {
       setUploadingAvatar(false);
     }

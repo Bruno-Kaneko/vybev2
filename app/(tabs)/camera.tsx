@@ -18,17 +18,11 @@ export default function CameraScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [timer, setTimer] = useState<TimerDuration>(4);
   const [loading, setLoading] = useState(false);
+  const [webWarning, setWebWarning] = useState(false);
 
   const openCamera = async () => {
     if (Platform.OS === 'web') {
-      // Web doesn't support camera, fallback to file picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-        allowsEditing: true,
-        aspect: [9, 16],
-      });
-      if (!result.canceled) setImage(result.assets[0].uri);
+      setWebWarning(true);
       return;
     }
 
@@ -87,6 +81,11 @@ export default function CameraScreen() {
                   <Camera color={Colors.secondary} size={40} strokeWidth={1.9} />
                 </View>
                 <Text style={styles.placeholderText}>Clique aqui para tirar a sua mídia</Text>
+                {webWarning && (
+                  <Text style={styles.webWarning}>
+                    No celular você usa a câmera direto. No navegador, a câmera não está disponível.
+                  </Text>
+                )}
               </View>
             )}
           </TouchableOpacity>
@@ -241,6 +240,14 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
     lineHeight: FontSize.lg * 1.4,
+  },
+  webWarning: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textDisabled,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+    lineHeight: FontSize.sm * 1.5,
   },
   section: {
     marginTop: Spacing['2xl'],

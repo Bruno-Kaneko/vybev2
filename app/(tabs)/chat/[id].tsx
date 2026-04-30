@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, ChevronLeft } from 'lucide-react-native';
+import { ArrowUp, ChevronLeft, Timer } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
@@ -54,6 +54,10 @@ export default function ChatScreen() {
           <View style={styles.headerCopy}>
             <Text style={styles.headerName}>{user.displayName}</Text>
             <Text style={styles.headerSub}>Ativo agora</Text>
+          </View>
+          <View style={styles.expiryBadge}>
+            <Timer color={Colors.secondary} size={12} strokeWidth={2.2} />
+            <Text style={styles.expiryText}>6h</Text>
           </View>
         </View>
 
@@ -121,6 +125,22 @@ const styles = StyleSheet.create({
   backBtn: {
     marginRight: Spacing.xs,
   },
+  expiryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(255,45,120,0.12)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,45,120,0.25)',
+  },
+  expiryText: {
+    fontFamily: FontFamily.mono,
+    fontSize: 11,
+    color: Colors.secondary,
+  },
   headerCopy: {
     flex: 1,
     minWidth: 0,
@@ -173,8 +193,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
     backgroundColor: Colors.background,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
   },
   inputShell: {
     height: 44,

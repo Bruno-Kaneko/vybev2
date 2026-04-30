@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, Heart, MapPin, MessageCircle, Send, X } from 'lucide-react-native';
+import { Bell, Heart, MapPin, MessageCircle, Send, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
@@ -27,6 +27,7 @@ export default function HomeScreen() {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [grupoesOpen, setGrupoesOpen] = useState(false);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -45,6 +46,7 @@ export default function HomeScreen() {
           <HomeHeader
             maxWidth={responsive.feedMaxWidth}
             onMessagesPress={() => setMessagesOpen(true)}
+            onGrupoesPress={() => setGrupoesOpen(true)}
           />
         }
         renderItem={({ item }) => (
@@ -56,11 +58,40 @@ export default function HomeScreen() {
         onClose={() => setMessagesOpen(false)}
         insets={insets}
       />
+      <GrupoesDrawer
+        visible={grupoesOpen}
+        onClose={() => setGrupoesOpen(false)}
+        insets={insets}
+      />
     </View>
   );
 }
 
-function HomeHeader({ maxWidth, onMessagesPress }: { maxWidth: number; onMessagesPress: () => void }) {
+function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress }: {
+  maxWidth: number;
+  onMessagesPress: () => void;
+  onGrupoesPress: () => void;
+}) {
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.7)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.spring(pulseScale, { toValue: 1.18, useNativeDriver: true, damping: 6, stiffness: 120 } as any),
+          Animated.timing(pulseOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.spring(pulseScale, { toValue: 1, useNativeDriver: true, damping: 6, stiffness: 120 } as any),
+          Animated.timing(pulseOpacity, { toValue: 0.7, duration: 400, useNativeDriver: true }),
+        ]),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
   return (
     <View style={[styles.header, { maxWidth, alignSelf: 'center', width: '100%' }]}>
       <BrandLogo width={118} height={38} />
@@ -70,6 +101,11 @@ function HomeHeader({ maxWidth, onMessagesPress }: { maxWidth: number; onMessage
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onMessagesPress}>
           <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.iconButton, styles.groupButton]} activeOpacity={0.78} onPress={onGrupoesPress}>
+          <Animated.View style={{ transform: [{ scale: pulseScale }], opacity: pulseOpacity }}>
+            <Users color={Colors.secondary} size={18} strokeWidth={2.1} />
+          </Animated.View>
         </TouchableOpacity>
       </View>
     </View>
@@ -197,6 +233,104 @@ function DrawerChatRow({ chat, onClose }: { chat: Chat; onClose: () => void }) {
         </Text>
       </View>
     </TouchableOpacity>
+  );
+}
+
+const MOCK_GRUPOS = [
+  { id: 'g1', name: 'Club Fama Tonight 🔥', members: 312, lastMsg: 'Quem ta chegando agora?', unread: 8 },
+  { id: 'g2', name: 'Bar do Victor — Rolê', members: 87, lastMsg: 'Open bar até meia-noite!', unread: 3 },
+  { id: 'g3', name: 'D-Edge rave crew', members: 540, lastMsg: 'Lineup confirmado 🎧', unread: 0 },
+  { id: 'g4', name: 'Balada SP — Geral', members: 1240, lastMsg: 'Alguém no Outs?', unread: 21 },
+];
+
+function GrupoesDrawer({
+  visible,
+  onClose,
+  insets,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  insets: { bottom: number; top: number };
+}) {
+  const { height: SCREEN_H } = useWindowDimensions();
+  const SNAP_HALF = Math.min(400, SCREEN_H * 0.58);
+  const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
+  const currentH = useRef(SNAP_HALF);
+
+  useEffect(() => {
+    if (visible) {
+      heightAnim.setValue(SNAP_HALF);
+      currentH.current = SNAP_HALF;
+    }
+  }, [visible]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderMove: (_, g) => {
+        heightAnim.setValue(Math.max(180, Math.min(SCREEN_H, currentH.current - g.dy)));
+      },
+      onPanResponderRelease: (_, g) => {
+        const next = currentH.current - g.dy;
+        if (g.vy > 0.5 || next < SNAP_HALF * 0.55) {
+          onClose();
+        } else if (g.vy < -0.5 || next > (SNAP_HALF + SCREEN_H) / 2) {
+          Animated.spring(heightAnim, { toValue: SCREEN_H, useNativeDriver: false, damping: 18, stiffness: 180 } as any).start();
+          currentH.current = SCREEN_H;
+        } else {
+          Animated.spring(heightAnim, { toValue: SNAP_HALF, useNativeDriver: false, damping: 18, stiffness: 180 } as any).start();
+          currentH.current = SNAP_HALF;
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.drawerContainer}>
+        <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
+          <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
+            <View style={styles.drawerHandle} />
+          </View>
+          <View style={styles.drawerHeader}>
+            <Text style={styles.drawerTitle}>Grupões</Text>
+            <TouchableOpacity onPress={onClose} style={styles.drawerClose}>
+              <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={MOCK_GRUPOS}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.drawerRow} activeOpacity={0.8}>
+                <View style={[styles.groupAvatar, { backgroundColor: Colors.surfaceElevated }]}>
+                  <Users color={Colors.secondary} size={22} strokeWidth={2} />
+                </View>
+                <View style={styles.drawerRowInfo}>
+                  <View style={styles.drawerRowTop}>
+                    <Text style={[styles.drawerRowName, item.unread > 0 && { color: Colors.white }]} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.drawerRowTime}>{item.members} membros</Text>
+                  </View>
+                  <Text style={[styles.drawerRowPreview, item.unread > 0 && { color: Colors.text }]} numberOfLines={1}>
+                    {item.lastMsg}
+                  </Text>
+                </View>
+                {item.unread > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadText}>{item.unread}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+          />
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
@@ -333,6 +467,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  groupButton: {
+    borderColor: 'rgba(255,45,120,0.35)',
+    backgroundColor: 'rgba(255,45,120,0.08)',
   },
   postCard: {
     width: '100%',
@@ -550,5 +688,30 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textMuted,
+  },
+  groupAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    flexShrink: 0,
+  },
+  unreadText: {
+    fontFamily: FontFamily.mono,
+    fontSize: 11,
+    color: Colors.white,
   },
 });
