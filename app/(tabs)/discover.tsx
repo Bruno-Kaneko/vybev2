@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   Image,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -323,6 +325,21 @@ function DiscoverHeader({
   );
 }
 
+function PulsingDot() {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.3] });
+  const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+  return <Animated.View style={[styles.liveDot, { transform: [{ scale }], opacity }]} />;
+}
+
 function PlaceCard({ place, columns, maxWidth }: { place: Place; columns: number; maxWidth: number }) {
   const categoryLabel: Record<Place['category'], string> = {
     club: 'Balada',
@@ -351,7 +368,7 @@ function PlaceCard({ place, columns, maxWidth }: { place: Place; columns: number
         <View style={styles.placeTopRow}>
           <Text style={styles.placeName} numberOfLines={1}>{place.name}</Text>
           <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
+            <PulsingDot />
             <Text style={styles.liveText}>AO VIVO</Text>
           </View>
         </View>

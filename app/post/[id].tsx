@@ -21,6 +21,7 @@ export default function PostDetailScreen() {
   const responsive = useResponsive();
   const post = MOCK_POSTS.find(p => p.id === id) ?? MOCK_POSTS[0];
   const [liked, setLiked] = useState(false);
+  const likeScale = useRef(new Animated.Value(1)).current;
   const [shared, setShared] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -105,13 +106,24 @@ export default function PostDetailScreen() {
           <Text style={styles.caption}>{post.caption}</Text>
 
           <View style={styles.actionsRow}>
-            <TouchableOpacity onPress={() => setLiked(prev => !prev)} style={styles.actionBtn}>
-              <Heart
-                color={liked ? Colors.secondary : Colors.white}
-                fill={liked ? Colors.secondary : 'transparent'}
-                size={24}
-                strokeWidth={2.2}
-              />
+            <TouchableOpacity
+              onPress={() => {
+                Animated.sequence([
+                  Animated.spring(likeScale, { toValue: 1.28, useNativeDriver: true, damping: 4, stiffness: 400 } as any),
+                  Animated.spring(likeScale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 260 } as any),
+                ]).start();
+                setLiked(prev => !prev);
+              }}
+              style={styles.actionBtn}
+            >
+              <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+                <Heart
+                  color={liked ? Colors.secondary : Colors.white}
+                  fill={liked ? Colors.secondary : 'transparent'}
+                  size={24}
+                  strokeWidth={2.2}
+                />
+              </Animated.View>
               <Text style={styles.actionLabel}>{post.reactions.heart + (liked ? 1 : 0)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentOpen(prev => !prev)}>

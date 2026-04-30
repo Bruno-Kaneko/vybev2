@@ -164,7 +164,7 @@ export default function MyProfileScreen() {
 
         <View style={styles.hero}>
           <TouchableOpacity onPress={handleChangeAvatar} activeOpacity={0.85} style={styles.avatarWrap}>
-            <Avatar uri={avatarUrl} size="xl" withGradientBorder />
+            <Avatar uri={avatarUrl ?? ''} size="xl" withGradientBorder />
             <View style={styles.avatarEditBadge}>
               {uploadingAvatar
                 ? <ActivityIndicator size="small" color={Colors.white} />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Beer, Camera, Check, Crown, Gift, Heart, MapPin, Ticket, Users, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
@@ -7,11 +7,20 @@ import { MOCK_REWARDS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import type { Reward } from '@/types';
 
+type RewardFilter = 'todos' | Reward['category'];
+
 const EARN_WAYS: Array<{ id: string; Icon: LucideIcon; label: string; points: number }> = [
   { id: 'post', Icon: Camera, label: 'Postar foto', points: 30 },
   { id: 'checkin', Icon: MapPin, label: 'Check-in no lugar', points: 10 },
   { id: 'reaction', Icon: Heart, label: 'Receber reacao', points: 5 },
   { id: 'follow', Icon: Users, label: 'Novo seguidor', points: 15 },
+];
+
+const REWARD_FILTERS: Array<{ key: RewardFilter; label: string; Icon: LucideIcon }> = [
+  { key: 'todos',    label: 'Todos',    Icon: Gift },
+  { key: 'drink',    label: 'Drinks',   Icon: Beer },
+  { key: 'discount', label: 'Desconto', Icon: Ticket },
+  { key: 'vip',      label: 'VIP',      Icon: Crown },
 ];
 
 export default function StoreScreen() {
@@ -21,11 +30,16 @@ export default function StoreScreen() {
   const [collected, setCollected] = useState<Set<string>>(new Set());
   const [redeemReward, setRedeemReward] = useState<Reward | null>(null);
   const [redeemed, setRedeemed] = useState(false);
+  const [rewardFilter, setRewardFilter] = useState<RewardFilter>('todos');
+
+  const filteredRewards = rewardFilter === 'todos'
+    ? MOCK_REWARDS
+    : MOCK_REWARDS.filter(r => r.category === rewardFilter);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <FlatList
-        data={MOCK_REWARDS}
+        data={filteredRewards}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
@@ -72,6 +86,22 @@ export default function StoreScreen() {
             </View>
 
             <Text style={styles.sectionTitle}>Recompensas</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
+              {REWARD_FILTERS.map(f => {
+                const active = rewardFilter === f.key;
+                return (
+                  <TouchableOpacity
+                    key={f.key}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    onPress={() => setRewardFilter(f.key)}
+                    activeOpacity={0.8}
+                  >
+                    <f.Icon color={active ? Colors.white : Colors.textMuted} size={13} strokeWidth={2.2} />
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{f.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         }
         renderItem={({ item }) => (
@@ -272,6 +302,36 @@ const styles = StyleSheet.create({
   collectBtnText: {
     fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.xs,
+    color: Colors.white,
+  },
+  filterRow: {
+    marginBottom: Spacing.md,
+  },
+  filterRowContent: {
+    gap: Spacing.sm,
+    paddingRight: Spacing.sm,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 32,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondary,
+  },
+  filterChipText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
+  filterChipTextActive: {
     color: Colors.white,
   },
   rewardCard: {

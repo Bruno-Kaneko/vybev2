@@ -7,6 +7,9 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, Plus, Search, Store, User, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants';
+import { MOCK_CHATS } from '@/constants/MockData';
+
+const CHAT_UNREAD = MOCK_CHATS.reduce((sum, c) => sum + c.unreadCount, 0);
 
 const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
   index: { Icon: Home, label: 'Home' },
@@ -47,6 +50,7 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
               return <CameraTab key={route.key} onPress={onPress} Icon={iconData.Icon} />;
             }
 
+            const badge = route.name === 'chat' && CHAT_UNREAD > 0 ? CHAT_UNREAD : 0;
             return (
               <TabItem
                 key={route.key}
@@ -54,6 +58,7 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
                 label={iconData.label}
                 isFocused={isFocused}
                 onPress={onPress}
+                badge={badge}
               />
             );
           })}
@@ -68,11 +73,13 @@ function TabItem({
   label,
   isFocused,
   onPress,
+  badge = 0,
 }: {
   Icon: LucideIcon;
   label: string;
   isFocused: boolean;
   onPress: () => void;
+  badge?: number;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -91,6 +98,11 @@ function TabItem({
       <Animated.View style={[styles.tabInner, { transform: [{ scale }] }]}>
         <View style={styles.iconWrapper}>
           <Icon color={color} size={23} strokeWidth={isFocused ? 2.6 : 2.1} />
+          {badge > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+            </View>
+          )}
         </View>
         <Text style={[styles.tabLabel, isFocused && { color: Colors.secondary }]}>
           {label}
@@ -172,6 +184,28 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: 9,
     color: Colors.textDisabled,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+  },
+  badgeText: {
+    fontFamily: FontFamily.body,
+    fontSize: 9,
+    color: Colors.white,
+    lineHeight: 14,
   },
   activeDot: {
     width: 4,

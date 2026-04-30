@@ -23,10 +23,18 @@ import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 
 const PLACE_EXTRAS: Record<string, { parking?: { name: string; address: string }; metro?: { name: string; distanceM: number } }> = {
-  place1: { parking: { name: 'Estacionamento Augusta', address: 'R. Bela Cintra, 210 — Consolação' }, metro: { name: 'Consolação', distanceM: 320 } },
-  place2: { parking: { name: 'Park Paulista', address: 'R. da Consolação, 222 — Consolação' }, metro: { name: 'Paulista', distanceM: 210 } },
-  place3: { parking: { name: 'Estacionamento Barra Funda', address: 'Av. Olga, 420 — Barra Funda' }, metro: { name: 'Palmeiras-Barra Funda', distanceM: 380 } },
-  place4: { parking: { name: 'Park Barra Funda', address: 'R. Tagipurus, 120 — Barra Funda' }, metro: { name: 'Marechal Deodoro', distanceM: 550 } },
+  place1:  { parking: { name: 'Estacionamento Augusta',    address: 'R. Bela Cintra, 210 — Consolação' },      metro: { name: 'Consolação',            distanceM: 320 } },
+  place2:  { parking: { name: 'Park Paulista',             address: 'R. da Consolação, 222 — Consolação' },    metro: { name: 'Paulista',              distanceM: 210 } },
+  place3:  { parking: { name: 'Estac. Barra Funda',       address: 'Av. Olga, 420 — Barra Funda' },           metro: { name: 'Palmeiras-Barra Funda', distanceM: 380 } },
+  place4:  { parking: { name: 'Park Barra Funda',         address: 'R. Tagipurus, 120 — Barra Funda' },       metro: { name: 'Marechal Deodoro',      distanceM: 550 } },
+  place5:  { parking: { name: 'Estapar Augusta',          address: 'R. Augusta, 680 — Consolação' },          metro: { name: 'Consolação',            distanceM: 290 } },
+  place6:  { metro: { name: 'Vila Madalena',              distanceM: 480 } },
+  place7:  { parking: { name: 'Park Pinheiros',           address: 'R. dos Pinheiros, 140 — Pinheiros' },     metro: { name: 'Fradique Coutinho',     distanceM: 350 } },
+  place8:  { parking: { name: 'Estapar Liberdade',        address: 'R. Galvão Bueno, 54 — Liberdade' },       metro: { name: 'São Joaquim',           distanceM: 200 } },
+  place9:  { parking: { name: 'Park Lapa',                address: 'Av. Pompéia, 210 — Alto da Lapa' },       metro: { name: 'Água Branca',           distanceM: 900 } },
+  place10: { metro: { name: 'Vila Madalena',              distanceM: 520 } },
+  place11: { parking: { name: 'Estac. Clash',             address: 'R. Barra Funda, 1120 — Barra Funda' },    metro: { name: 'Palmeiras-Barra Funda', distanceM: 420 } },
+  place12: { parking: { name: 'Estapar Rebouças',         address: 'Av. Rebouças, 4060 — Pinheiros' },        metro: { name: 'Clínicas',              distanceM: 650 } },
 };
 
 function copyToClipboard(text: string) {

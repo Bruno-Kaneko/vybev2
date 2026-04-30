@@ -11,7 +11,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Grid3X3, Instagram, MapPin, MessageCircle } from 'lucide-react-native';
+import { AtSign, ChevronLeft, Grid3X3, MapPin, MessageCircle } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
@@ -56,7 +56,7 @@ export default function ProfileScreen() {
               activeOpacity={0.75}
               onPress={() => Linking.openURL(`https://instagram.com/${user.instagram}`)}
             >
-              <Instagram color={Colors.textMuted} size={14} strokeWidth={2} />
+              <AtSign color={Colors.textMuted} size={14} strokeWidth={2} />
               <Text style={styles.instagramHandle}>@{user.instagram}</Text>
             </TouchableOpacity>
           ) : null}

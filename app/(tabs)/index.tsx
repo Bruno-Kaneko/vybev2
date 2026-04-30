@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {
   View,
   Text,
@@ -297,6 +298,8 @@ function NotificationsDrawer({
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
   const currentH = useRef(SNAP_HALF);
   const slideAnim = useRef(new Animated.Value(400)).current;
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const notifs = useMemo(() => MOCK_NOTIFS.filter(n => !dismissed.has(n.id)), [dismissed]);
 
   useEffect(() => {
     if (visible) {
@@ -344,33 +347,48 @@ function NotificationsDrawer({
             </TouchableOpacity>
           </View>
           <FlatList
-            data={MOCK_NOTIFS}
+            data={notifs}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.notifEmpty}>
+                <Text style={styles.notifEmptyText}>Nenhuma notificação</Text>
+              </View>
+            }
             renderItem={({ item }) => {
               const diff = Date.now() - item.time;
               const mins = Math.floor(diff / 60000);
               const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
               return (
-                <TouchableOpacity
-                  style={styles.drawerRow}
-                  activeOpacity={0.75}
-                  onPress={() => {
-                    onClose();
-                    if (item.link) router.push(item.link as any);
-                  }}
+                <Swipeable
+                  renderRightActions={() => (
+                    <View style={styles.notifSwipeDelete}>
+                      <Text style={styles.notifSwipeDeleteText}>✕</Text>
+                    </View>
+                  )}
+                  onSwipeableOpen={() => setDismissed(prev => new Set([...prev, item.id]))}
+                  rightThreshold={60}
                 >
-                  <View style={[styles.notifIcon, { backgroundColor: item.type === 'like' ? 'rgba(255,45,120,0.15)' : 'rgba(123,47,255,0.15)' }]}>
-                    <Text style={styles.notifEmoji}>{item.type === 'like' ? '❤️' : '👤'}</Text>
-                  </View>
-                  <View style={styles.drawerRowInfo}>
-                    <Text style={styles.drawerRowName} numberOfLines={2}>
-                      <Text style={{ color: Colors.white }}>{item.user}</Text>
-                      {' '}{item.text}
-                    </Text>
-                    <Text style={styles.drawerRowTime}>{timeStr}</Text>
-                  </View>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.drawerRow}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      onClose();
+                      if (item.link) router.push(item.link as any);
+                    }}
+                  >
+                    <View style={[styles.notifIcon, { backgroundColor: item.type === 'like' ? 'rgba(255,45,120,0.15)' : 'rgba(123,47,255,0.15)' }]}>
+                      <Text style={styles.notifEmoji}>{item.type === 'like' ? '❤️' : '👤'}</Text>
+                    </View>
+                    <View style={styles.drawerRowInfo}>
+                      <Text style={styles.drawerRowName} numberOfLines={2}>
+                        <Text style={{ color: Colors.white }}>{item.user}</Text>
+                        {' '}{item.text}
+                      </Text>
+                      <Text style={styles.drawerRowTime}>{timeStr}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </Swipeable>
               );
             }}
           />
@@ -1095,6 +1113,29 @@ const styles = StyleSheet.create({
   },
   notifEmoji: {
     fontSize: 18,
+  },
+  notifSwipeDelete: {
+    width: 72,
+    backgroundColor: Colors.urgent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.md,
+    marginVertical: 2,
+    marginRight: Spacing.md,
+  },
+  notifSwipeDeleteText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontFamily: FontFamily.bodySemiBold,
+  },
+  notifEmpty: {
+    paddingVertical: Spacing['2xl'],
+    alignItems: 'center',
+  },
+  notifEmptyText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
   },
   groupAvatar: {
     width: 46,
