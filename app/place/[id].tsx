@@ -23,11 +23,10 @@ import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 
 const PLACE_EXTRAS: Record<string, { parking?: { name: string; address: string }; metro?: { name: string; distanceM: number } }> = {
-  p1: { parking: { name: 'Estacionamento Fama', address: 'R. Bela Cintra, 210 — Consolação' }, metro: { name: 'Consolação', distanceM: 320 } },
-  p2: { parking: { name: 'Park Vila Olímpia', address: 'R. Olimpíadas, 66 — Vila Olímpia' }, metro: { name: 'Vila Olímpia', distanceM: 180 } },
-  p3: { parking: { name: 'Estacionamento Central', address: 'Av. Rebouças, 3970 — Pinheiros' }, metro: { name: 'Fradique Coutinho', distanceM: 450 } },
-  p4: { parking: { name: 'Park Augusta', address: 'R. Augusta, 880 — Consolação' }, metro: { name: 'Paulista', distanceM: 600 } },
-  p5: { parking: { name: 'Estacionamento Vila Madalena', address: 'R. Harmonia, 140 — Vila Madalena' }, metro: { name: 'Vila Madalena', distanceM: 390 } },
+  place1: { parking: { name: 'Estacionamento Augusta', address: 'R. Bela Cintra, 210 — Consolação' }, metro: { name: 'Consolação', distanceM: 320 } },
+  place2: { parking: { name: 'Park Paulista', address: 'R. da Consolação, 222 — Consolação' }, metro: { name: 'Paulista', distanceM: 210 } },
+  place3: { parking: { name: 'Estacionamento Barra Funda', address: 'Av. Olga, 420 — Barra Funda' }, metro: { name: 'Palmeiras-Barra Funda', distanceM: 380 } },
+  place4: { parking: { name: 'Park Barra Funda', address: 'R. Tagipurus, 120 — Barra Funda' }, metro: { name: 'Marechal Deodoro', distanceM: 550 } },
 };
 
 function copyToClipboard(text: string) {
@@ -225,32 +224,20 @@ export default function PlaceProfileScreen() {
                   </View>
                 )}
                 <View style={styles.amenitiesGrid}>
-                  {(extras.metro || place.nearMetro) ? (
-                    <TouchableOpacity
-                      style={[styles.amenityChip, styles.amenityChipActive]}
-                      activeOpacity={0.75}
-                      onPress={() => extras.metro && setMetroPopup(true)}
-                    >
-                      <Text style={styles.amenityText}>🚇 Metrô</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.amenityChip}>
-                      <Text style={styles.amenityText}>✗ Metrô</Text>
-                    </View>
-                  )}
-                  {place.hasParking ? (
-                    <TouchableOpacity
-                      style={[styles.amenityChip, styles.amenityChipActive]}
-                      activeOpacity={0.75}
-                      onPress={() => extras.parking && setParkingPopup(true)}
-                    >
-                      <Text style={styles.amenityText}>🅿️ Estacionamento</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.amenityChip}>
-                      <Text style={styles.amenityText}>✗ Estacionamento</Text>
-                    </View>
-                  )}
+                  <TouchableOpacity
+                    style={[styles.amenityChip, place.nearMetro && styles.amenityChipActive]}
+                    activeOpacity={0.75}
+                    onPress={() => setMetroPopup(true)}
+                  >
+                    <Text style={styles.amenityText}>{place.nearMetro ? '🚇' : '✗'} Metrô</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.amenityChip, place.hasParking && styles.amenityChipActive]}
+                    activeOpacity={0.75}
+                    onPress={() => setParkingPopup(true)}
+                  >
+                    <Text style={styles.amenityText}>{place.hasParking ? '🅿️' : '✗'} Estacionamento</Text>
+                  </TouchableOpacity>
                   <View style={[styles.amenityChip, place.hasSeating && styles.amenityChipActive]}>
                     <Text style={styles.amenityText}>{place.hasSeating ? '🪑' : '✗'} Mesas</Text>
                   </View>
@@ -334,11 +321,15 @@ export default function PlaceProfileScreen() {
           <View style={styles.popupCard}>
             <Text style={styles.popupEmoji}>🚇</Text>
             <Text style={styles.popupTitle}>Metrô mais próximo</Text>
-            {extras.metro && (
+            {extras.metro ? (
               <>
                 <Text style={styles.popupMain}>{extras.metro.name}</Text>
                 <Text style={styles.popupSub}>{extras.metro.distanceM} metros de distância</Text>
               </>
+            ) : place.nearMetro ? (
+              <Text style={styles.popupSub}>Metrô próximo a este local</Text>
+            ) : (
+              <Text style={styles.popupSub}>Sem metrô próximo a este local</Text>
             )}
             <TouchableOpacity style={styles.popupBtn} onPress={() => setMetroPopup(false)}>
               <Text style={styles.popupBtnText}>Fechar</Text>
@@ -353,7 +344,7 @@ export default function PlaceProfileScreen() {
           <View style={styles.popupCard}>
             <Text style={styles.popupEmoji}>🅿️</Text>
             <Text style={styles.popupTitle}>Estacionamento mais próximo</Text>
-            {extras.parking && (
+            {extras.parking ? (
               <>
                 <Text style={styles.popupMain}>{extras.parking.name}</Text>
                 <Text style={styles.popupSub}>{extras.parking.address}</Text>
@@ -368,6 +359,10 @@ export default function PlaceProfileScreen() {
                   </Text>
                 </TouchableOpacity>
               </>
+            ) : (
+              <Text style={styles.popupSub}>
+                {place.hasParking ? 'Estacionamento disponível próximo' : 'Sem estacionamento próximo a este local'}
+              </Text>
             )}
             <TouchableOpacity style={[styles.popupBtn, { marginTop: Spacing.xs }]} onPress={() => setParkingPopup(false)}>
               <Text style={styles.popupBtnText}>Fechar</Text>

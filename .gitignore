@@ -40,3 +40,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# secrets (tokens — never commit)
+constants/mapbox-token.ts

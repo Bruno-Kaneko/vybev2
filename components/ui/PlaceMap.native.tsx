@@ -4,7 +4,8 @@ import MapboxGL from '@rnmapbox/maps';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import type { Place } from '@/types';
 
-MapboxGL.setAccessToken('MAPBOX_PUBLIC_TOKEN_HERE');
+import { MAPBOX_PUBLIC_TOKEN } from '@/constants/mapbox-token';
+MapboxGL.setAccessToken(MAPBOX_PUBLIC_TOKEN);
 
 const SP_CENTER: [number, number] = [-46.6416, -23.5505];
 
