@@ -23,6 +23,7 @@ import Svg, { Circle, Rect, Text as SvgText } from 'react-native-svg';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { BrandLogo, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import { signIn, resetPassword } from '@/lib/auth';
 
 type SocialProvider = 'google' | 'icloud' | 'instagram';
 type SvgIcon = React.ComponentType<{ color: string; size: number }>;
@@ -36,28 +37,47 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
   const [message, setMessage] = useState('');
-
-  const goToApp = async () => {
-    await new Promise(r => setTimeout(r, 650));
-    router.replace('/(tabs)');
-  };
+  const [isError, setIsError] = useState(false);
 
   const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      setIsError(true);
+      setMessage('Preencha email e senha.');
+      return;
+    }
     setMessage('');
+    setIsError(false);
     setLoading(true);
-    await goToApp();
-    setLoading(false);
+    try {
+      await signIn(email.trim(), password);
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      setIsError(true);
+      setMessage(e.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSocialLogin = async (provider: SocialProvider) => {
-    setMessage('');
-    setSocialLoading(provider);
-    await goToApp();
-    setSocialLoading(null);
+    setIsError(false);
+    setMessage(`Login com ${provider} em breve!`);
   };
 
-  const handleForgotPassword = () => {
-    setMessage(email.trim() ? `Enviamos as instrucoes para ${email.trim()}.` : 'Digite seu email para recuperar a senha.');
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setIsError(true);
+      setMessage('Digite seu email para recuperar a senha.');
+      return;
+    }
+    try {
+      await resetPassword(email.trim());
+      setIsError(false);
+      setMessage(`Enviamos as instrucoes para ${email.trim()}.`);
+    } catch (e: any) {
+      setIsError(true);
+      setMessage(e.message);
+    }
   };
 
   return (
@@ -152,7 +172,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          {message ? <Text style={styles.feedback}>{message}</Text> : null}
+          {message ? <Text style={[styles.feedback, isError && styles.feedbackError]}>{message}</Text> : null}
 
           <View style={styles.registerSection}>
             <Text style={styles.registerText}>Ainda nao tem conta? </Text>
@@ -368,6 +388,9 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     textAlign: 'center',
     marginBottom: Spacing.lg,
+  },
+  feedbackError: {
+    color: '#FF4444',
   },
   registerSection: {
     flexDirection: 'row',

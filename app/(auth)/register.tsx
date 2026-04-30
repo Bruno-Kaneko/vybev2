@@ -16,6 +16,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import { signUp } from '@/lib/auth';
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
@@ -24,12 +25,32 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
 
   const handleRegister = async () => {
+    if (!username.trim() || !email.trim() || !password.trim()) {
+      setIsError(true);
+      setMessage('Preencha todos os campos.');
+      return;
+    }
+    if (password.length < 8) {
+      setIsError(true);
+      setMessage('A senha precisa ter pelo menos 8 caracteres.');
+      return;
+    }
+    setMessage('');
+    setIsError(false);
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
-    setLoading(false);
-    router.replace('/(tabs)');
+    try {
+      await signUp(email.trim(), password, username.trim());
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      setIsError(true);
+      setMessage(e.message === 'User already registered' ? 'Esse email ja esta em uso.' : e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -108,6 +129,10 @@ export default function RegisterScreen() {
               size="lg"
               style={{ marginTop: Spacing.md }}
             />
+
+            {message ? (
+              <Text style={[styles.feedback, isError && styles.feedbackError]}>{message}</Text>
+            ) : null}
 
             <Text style={styles.terms}>
               Ao criar conta voce concorda com os{' '}
@@ -197,5 +222,14 @@ const styles = StyleSheet.create({
   },
   termsLink: {
     color: Colors.secondary,
+  },
+  feedback: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.secondary,
+    textAlign: 'center',
+  },
+  feedbackError: {
+    color: '#FF4444',
   },
 });
