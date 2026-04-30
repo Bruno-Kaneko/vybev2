@@ -6,45 +6,97 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Alert,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Edit3, Grid3X3, LogOut, MapPin, Settings } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Camera, Grid3X3, LogOut, MapPin, Settings } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { signOut } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 
 export default function MyProfileScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const { user } = useAuth();
   const [message, setMessage] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null);
 
   const thumbGap = Spacing.xs;
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
-  const displayName = user?.user_metadata?.username
-    ?? user?.email?.split('@')[0]
-    ?? 'Usuário';
-  const username = user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
-  const avatarUrl = user?.user_metadata?.avatar_url ?? null;
+  const rawUsername = user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
+  const username = rawUsername.replace(/^@/, '');
+  const displayName = username;
+  const avatarUrl = localAvatar ?? (user?.user_metadata?.avatar_url as string | null) ?? null;
 
-  const handleLogout = () => {
-    Alert.alert('Sair', 'Tem certeza que quer sair?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair', style: 'destructive', onPress: async () => {
-          await signOut();
-          router.replace('/(onboarding)');
-        },
-      },
-    ]);
+  const handleLogout = async () => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Tem certeza que quer sair?')
+      : await new Promise<boolean>(resolve =>
+          require('react-native').Alert.alert('Sair', 'Tem certeza que quer sair?', [
+            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Sair', style: 'destructive', onPress: () => resolve(true) },
+          ])
+        );
+    if (!confirmed) return;
+    await signOut();
+    router.replace('/(onboarding)');
+  };
+
+  const handleChangeAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setMessage('Precisamos de permissão para acessar suas fotos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    const uri = result.assets[0].uri;
+    setUploadingAvatar(true);
+    setMessage('');
+
+    try {
+      const ext = uri.split('.').pop() ?? 'jpg';
+      const fileName = `${user!.id}/avatar.${ext}`;
+
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, arrayBuffer, { contentType: `image/${ext}`, upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+
+      await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+      setLocalAvatar(publicUrl);
+      setMessage('Foto atualizada!');
+    } catch {
+      setMessage('Erro ao enviar foto. Tente de novo.');
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   return (
@@ -73,7 +125,15 @@ export default function MyProfileScreen() {
         </View>
 
         <View style={styles.hero}>
-          <Avatar uri={avatarUrl} size="xl" withGradientBorder />
+          <TouchableOpacity onPress={handleChangeAvatar} activeOpacity={0.85} style={styles.avatarWrap}>
+            <Avatar uri={avatarUrl} size="xl" withGradientBorder />
+            <View style={styles.avatarEditBadge}>
+              {uploadingAvatar
+                ? <ActivityIndicator size="small" color={Colors.white} />
+                : <Camera color={Colors.white} size={14} strokeWidth={2.4} />
+              }
+            </View>
+          </TouchableOpacity>
           <Text style={styles.displayName}>{displayName}</Text>
           <Text style={styles.username}>@{username}</Text>
         </View>
@@ -180,11 +240,27 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing['2xl'],
     gap: Spacing.xs,
   },
+  avatarWrap: {
+    position: 'relative',
+    marginBottom: Spacing.sm,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.background,
+  },
   displayName: {
     fontFamily: FontFamily.heading,
     fontSize: FontSize['2xl'],
     color: Colors.white,
-    marginTop: Spacing.md,
   },
   username: {
     fontFamily: FontFamily.body,

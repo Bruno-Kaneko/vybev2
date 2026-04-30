@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, Clock3, ImagePlus, MapPin, Send, X } from 'lucide-react-native';
+import { Clock3, MapPin, Send, X, Camera } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -19,27 +19,28 @@ export default function CameraScreen() {
   const [timer, setTimer] = useState<TimerDuration>(4);
   const [loading, setLoading] = useState(false);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [9, 16],
-    });
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
+  const openCamera = async () => {
+    if (Platform.OS === 'web') {
+      // Web doesn't support camera, fallback to file picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: true,
+        aspect: [9, 16],
+      });
+      if (!result.canceled) setImage(result.assets[0].uri);
+      return;
     }
-  };
 
-  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return;
+
     const result = await ImagePicker.launchCameraAsync({
       quality: 0.85,
       allowsEditing: true,
       aspect: [9, 16],
     });
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
+    if (!result.canceled) setImage(result.assets[0].uri);
   };
 
   const handlePost = async () => {
@@ -71,31 +72,24 @@ export default function CameraScreen() {
             <View style={{ width: 36 }} />
           </View>
 
-          <TouchableOpacity onPress={pickImage} style={styles.imagePicker} activeOpacity={0.9}>
+          <TouchableOpacity onPress={openCamera} style={styles.imagePicker} activeOpacity={0.9}>
             {image ? (
-              <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" />
+              <>
+                <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" />
+                <TouchableOpacity style={styles.retakeBtn} onPress={openCamera} activeOpacity={0.85}>
+                  <Camera color={Colors.white} size={16} strokeWidth={2.2} />
+                  <Text style={styles.retakeText}>Tirar outra</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <View style={styles.imagePlaceholder}>
                 <View style={styles.placeholderIcon}>
-                  <ImagePlus color={Colors.secondary} size={40} strokeWidth={1.9} />
+                  <Camera color={Colors.secondary} size={40} strokeWidth={1.9} />
                 </View>
-                <Text style={styles.placeholderText}>Toque para escolher foto</Text>
-                <Text style={styles.placeholderSub}>ou use a camera abaixo</Text>
+                <Text style={styles.placeholderText}>Clique aqui para tirar a sua mídia</Text>
               </View>
             )}
           </TouchableOpacity>
-
-          <View style={styles.cameraRow}>
-            <TouchableOpacity onPress={takePhoto} style={styles.cameraBtn}>
-              <Camera color={Colors.text} size={18} strokeWidth={2.2} />
-              <Text style={styles.cameraBtnLabel}>Camera</Text>
-            </TouchableOpacity>
-            {image && (
-              <TouchableOpacity onPress={() => setImage(null)} style={styles.clearBtn}>
-                <Text style={styles.clearBtnText}>Trocar foto</Text>
-              </TouchableOpacity>
-            )}
-          </View>
 
           <View style={styles.section}>
             <View style={styles.sectionTitleRow}>
@@ -144,7 +138,7 @@ export default function CameraScreen() {
 
           <View style={styles.postSection}>
             <VybeButton
-              label={image ? 'Publicar agora' : 'Escolha uma foto primeiro'}
+              label={image ? 'Publicar agora' : 'Tire uma foto primeiro'}
               onPress={handlePost}
               loading={loading}
               disabled={!image}
@@ -207,66 +201,46 @@ const styles = StyleSheet.create({
   previewImage: {
     flex: 1,
   },
+  retakeBtn: {
+    position: 'absolute',
+    bottom: Spacing.md,
+    right: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  retakeText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.white,
+  },
   imagePlaceholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
     padding: Spacing.xl,
   },
   placeholderIcon: {
-    width: 78,
-    height: 78,
-    borderRadius: 24,
+    width: 88,
+    height: 88,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surfaceElevated,
-    marginBottom: Spacing.xs,
   },
   placeholderText: {
     fontFamily: FontFamily.headingMedium,
     fontSize: FontSize.lg,
     color: Colors.textMuted,
     textAlign: 'center',
-  },
-  placeholderSub: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.md,
-    color: Colors.textDisabled,
-    textAlign: 'center',
-  },
-  cameraRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    marginTop: Spacing.md,
-  },
-  cameraBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  cameraBtnLabel: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.md,
-    color: Colors.text,
-  },
-  clearBtn: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  clearBtnText: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.sm,
-    color: Colors.textMuted,
+    lineHeight: FontSize.lg * 1.4,
   },
   section: {
     marginTop: Spacing['2xl'],

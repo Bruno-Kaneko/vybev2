@@ -57,7 +57,9 @@ export default function StoreScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <RewardCard reward={item} userPoints={userPoints} maxWidth={responsive.contentMaxWidth} />
+          <View style={{ width: '100%', alignItems: 'center' }}>
+            <RewardCard reward={item} userPoints={userPoints} maxWidth={responsive.contentMaxWidth} />
+          </View>
         )}
       />
     </View>
@@ -96,9 +98,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  listContent: {
-    alignItems: 'center',
-  },
+  listContent: {},
   shell: {
     width: '100%',
   },
