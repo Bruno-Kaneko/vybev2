@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Share as NativeShare, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Share as NativeShare, ScrollView, Animated } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +16,7 @@ const MOCK_COMMENTS: Comment[] = [
 ];
 
 export default function PostDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, autoComment } = useLocalSearchParams<{ id: string; autoComment?: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const post = MOCK_POSTS.find(p => p.id === id) ?? MOCK_POSTS[0];
@@ -25,6 +25,22 @@ export default function PostDetailScreen() {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<Comment[]>(MOCK_COMMENTS);
+  const commentRef = useRef<TextInput>(null);
+  const commentReveal = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (autoComment === '1') setCommentOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (commentOpen) {
+      Animated.spring(commentReveal, { toValue: 1, useNativeDriver: true, damping: 18, stiffness: 160 } as any).start(() => {
+        commentRef.current?.focus();
+      });
+    } else {
+      Animated.timing(commentReveal, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+    }
+  }, [commentOpen]);
 
   const sendComment = () => {
     if (!commentText.trim()) return;
@@ -109,34 +125,37 @@ export default function PostDetailScreen() {
           </View>
         </View>
 
-        {commentOpen && (
-          <View style={styles.commentSection}>
-            {comments.map(c => (
-              <View key={c.id} style={styles.commentRow}>
-                <Text style={styles.commentUser}>@{c.user}</Text>
-                <Text style={styles.commentText}>{c.text}</Text>
-              </View>
-            ))}
-            <View style={styles.commentInputRow}>
-              <TextInput
-                value={commentText}
-                onChangeText={setCommentText}
-                placeholder="Adicionar comentário..."
-                placeholderTextColor={Colors.textDisabled}
-                style={[styles.commentInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
-                returnKeyType="send"
-                onSubmitEditing={sendComment}
-              />
-              <TouchableOpacity
-                onPress={sendComment}
-                style={[styles.commentSendBtn, !commentText.trim() && { opacity: 0.4 }]}
-                disabled={!commentText.trim()}
-              >
-                <ArrowUp color={Colors.white} size={16} strokeWidth={2.5} />
-              </TouchableOpacity>
+        <Animated.View style={[styles.commentSection, {
+          opacity: commentReveal,
+          transform: [{ translateY: commentReveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+          pointerEvents: commentOpen ? 'auto' : 'none',
+        }]}>
+          {comments.map(c => (
+            <View key={c.id} style={styles.commentRow}>
+              <Text style={styles.commentUser}>@{c.user}</Text>
+              <Text style={styles.commentText}>{c.text}</Text>
             </View>
+          ))}
+          <View style={styles.commentInputRow}>
+            <TextInput
+              ref={commentRef}
+              value={commentText}
+              onChangeText={setCommentText}
+              placeholder="Adicionar comentário..."
+              placeholderTextColor={Colors.textDisabled}
+              style={[styles.commentInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
+              returnKeyType="send"
+              onSubmitEditing={sendComment}
+            />
+            <TouchableOpacity
+              onPress={sendComment}
+              style={[styles.commentSendBtn, !commentText.trim() && { opacity: 0.4 }]}
+              disabled={!commentText.trim()}
+            >
+              <ArrowUp color={Colors.white} size={16} strokeWidth={2.5} />
+            </TouchableOpacity>
           </View>
-        )}
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

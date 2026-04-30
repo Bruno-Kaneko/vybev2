@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking, Modal } from 'react-native';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking, Modal, Animated } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +34,15 @@ export default function PlaceProfileScreen() {
   const [following, setFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'info'>('posts');
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const slideAnim = useRef(new Animated.Value(400)).current;
+
+  useEffect(() => {
+    if (scheduleOpen) {
+      slideAnim.setValue(400);
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 } as any).start();
+    }
+  }, [scheduleOpen]);
+
   const place = MOCK_PLACES.find(item => item.id === id) ?? MOCK_PLACES[0];
   const placePosts = MOCK_POSTS.filter(post => post.placeId === place.id);
   const initials = useMemo(() => getInitials(place.name), [place.name]);
@@ -164,6 +173,43 @@ export default function PlaceProfileScreen() {
                     </Text>
                   </View>
                 </View>
+                {place.priceLevel !== undefined && (
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.infoLabel}>Preço</Text>
+                    <Text style={styles.priceText}>{'$'.repeat(place.priceLevel)}<Text style={styles.priceGhost}>{'$'.repeat(5 - place.priceLevel)}</Text></Text>
+                  </View>
+                )}
+                {place.coverCharge !== undefined && (
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.infoLabel}>Entrada</Text>
+                    <Text style={styles.infoText}>{place.coverCharge === 0 ? 'Gratuita' : `R$ ${place.coverCharge}`}</Text>
+                  </View>
+                )}
+                {place.crowdLevel !== undefined && (
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.infoLabel}>Lotação agora</Text>
+                    <View style={styles.crowdRow}>
+                      <View style={[styles.crowdDot, {
+                        backgroundColor: place.crowdLevel === 'baixo' ? '#22C55E' : place.crowdLevel === 'médio' ? '#F59E0B' : place.crowdLevel === 'alto' ? '#EF4444' : '#FF2D78'
+                      }]} />
+                      <Text style={styles.infoText}>{place.crowdLevel.charAt(0).toUpperCase() + place.crowdLevel.slice(1)}</Text>
+                    </View>
+                  </View>
+                )}
+                <View style={styles.amenitiesGrid}>
+                  <View style={[styles.amenityChip, place.nearMetro && styles.amenityChipActive]}>
+                    <Text style={styles.amenityText}>{place.nearMetro ? '🚇' : '✗'} Metrô</Text>
+                  </View>
+                  <View style={[styles.amenityChip, place.hasParking && styles.amenityChipActive]}>
+                    <Text style={styles.amenityText}>{place.hasParking ? '🅿️' : '✗'} Estacionamento</Text>
+                  </View>
+                  <View style={[styles.amenityChip, place.hasSeating && styles.amenityChipActive]}>
+                    <Text style={styles.amenityText}>{place.hasSeating ? '🪑' : '✗'} Mesas</Text>
+                  </View>
+                  <View style={[styles.amenityChip, place.hasMenu && styles.amenityChipActive]}>
+                    <Text style={styles.amenityText}>{place.hasMenu ? '📋' : '✗'} Cardápio</Text>
+                  </View>
+                </View>
                 {(place.tags ?? []).length > 0 && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Tags</Text>
@@ -203,9 +249,9 @@ export default function PlaceProfileScreen() {
       </View>
 
       {/* Agenda modal */}
-      <Modal visible={scheduleOpen} transparent animationType="slide" onRequestClose={() => setScheduleOpen(false)}>
+      <Modal visible={scheduleOpen} transparent animationType="none" onRequestClose={() => setScheduleOpen(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + Spacing.xl }]}>
+          <Animated.View style={[styles.modalSheet, { paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: slideAnim }] }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Agenda — {place.name}</Text>
               <TouchableOpacity onPress={() => setScheduleOpen(false)} style={styles.modalClose}>
@@ -230,7 +276,7 @@ export default function PlaceProfileScreen() {
                 <Text style={styles.eventPrice}>{ev.price}</Text>
               </View>
             ))}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </View>
@@ -509,10 +555,50 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.secondary,
   },
+  priceText: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.secondary,
+  },
+  priceGhost: {
+    color: Colors.border,
+  },
+  crowdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  crowdDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  amenitiesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  amenityChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  amenityChipActive: {
+    borderColor: 'rgba(255,45,120,0.35)',
+    backgroundColor: 'rgba(255,45,120,0.08)',
+  },
+  amenityText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
   // Agenda modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   modalSheet: {

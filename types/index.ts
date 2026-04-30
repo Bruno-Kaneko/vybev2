@@ -46,6 +46,14 @@ export interface Place {
   activePosts: number;
   activeUsers: number;
   thumbnail?: string;
+  neighborhood?: string;
+  priceLevel?: 1 | 2 | 3 | 4 | 5;
+  crowdLevel?: 'baixo' | 'médio' | 'alto' | 'lotado';
+  nearMetro?: boolean;
+  hasParking?: boolean;
+  hasSeating?: boolean;
+  coverCharge?: number;
+  hasMenu?: boolean;
 }
 
 export interface Message {

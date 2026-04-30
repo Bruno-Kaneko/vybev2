@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,15 +13,32 @@ import type { TimerDuration } from '@/types';
 const TIMER_OPTIONS: TimerDuration[] = [2, 4, 6];
 
 const SP_LOCATIONS = [
-  { id: 'l1', name: 'Club Fama', address: 'Rua Augusta, 600' },
-  { id: 'l2', name: 'Bar do Victor', address: 'Av. Paulista, 1000' },
-  { id: 'l3', name: 'D-Edge', address: 'Av. Olga, 170' },
-  { id: 'l4', name: 'Outs Club', address: 'R. Barra Funda, 969' },
-  { id: 'l5', name: 'Cine Joia', address: 'Praça Carlos Gomes, 82' },
-  { id: 'l6', name: 'Blue Note SP', address: 'Av. Paulista, 2073' },
-  { id: 'l7', name: 'Bar Balcão', address: 'R. dos Pinheiros, 994' },
-  { id: 'l8', name: 'Frank Bar', address: 'R. José Maria Lisboa, 190' },
+  { id: 'l1', name: 'Club Fama', address: 'Rua Augusta, 600', neighborhood: 'Consolação' },
+  { id: 'l2', name: 'Bar do Victor', address: 'Av. Paulista, 1000', neighborhood: 'Paulista' },
+  { id: 'l3', name: 'D-Edge', address: 'Av. Olga, 170', neighborhood: 'Barra Funda' },
+  { id: 'l4', name: 'Outs Club', address: 'R. Barra Funda, 969', neighborhood: 'Barra Funda' },
+  { id: 'l5', name: 'Cine Joia', address: 'Praça Carlos Gomes, 82', neighborhood: 'Centro' },
+  { id: 'l6', name: 'Blue Note SP', address: 'Av. Paulista, 2073', neighborhood: 'Paulista' },
+  { id: 'l7', name: 'Bar Balcão', address: 'R. dos Pinheiros, 994', neighborhood: 'Pinheiros' },
+  { id: 'l8', name: 'Frank Bar', address: 'R. José Maria Lisboa, 190', neighborhood: 'Jardins' },
+  { id: 'l9', name: 'A Lôca', address: 'R. Fradique Coutinho, 1150', neighborhood: 'Pinheiros' },
+  { id: 'l10', name: 'Trackers', address: 'R. Cardeal Arcoverde, 2852', neighborhood: 'Pinheiros' },
 ];
+
+function LocationRow({ item, selected, onPress }: { item: typeof SP_LOCATIONS[0]; selected: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={[styles.locRow, selected && styles.locRowActive]} activeOpacity={0.8} onPress={onPress}>
+      <View style={styles.locIconWrap}>
+        <MapPin color={selected ? Colors.secondary : Colors.textMuted} size={18} strokeWidth={2.2} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.locName, selected && { color: Colors.white }]}>{item.name}</Text>
+        <Text style={styles.locAddr} numberOfLines={1}>{item.address} · {item.neighborhood}</Text>
+      </View>
+      {selected && <Check color={Colors.secondary} size={18} strokeWidth={2.4} />}
+    </TouchableOpacity>
+  );
+}
 
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
@@ -32,6 +49,7 @@ export default function CameraScreen() {
   const [webWarning, setWebWarning] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(SP_LOCATIONS[0]);
+  const [mockNeighborhood] = useState('Pinheiros');
 
   const openCamera = async () => {
     if (Platform.OS === 'web') {
@@ -176,30 +194,19 @@ export default function CameraScreen() {
                 <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={SP_LOCATIONS}
-              keyExtractor={item => item.id}
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => {
-                const active = item.id === selectedLocation.id;
-                return (
-                  <TouchableOpacity
-                    style={[styles.locRow, active && styles.locRowActive]}
-                    activeOpacity={0.8}
-                    onPress={() => { setSelectedLocation(item); setLocationOpen(false); }}
-                  >
-                    <View style={styles.locIconWrap}>
-                      <MapPin color={active ? Colors.secondary : Colors.textMuted} size={18} strokeWidth={2.2} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[styles.locName, active && { color: Colors.white }]}>{item.name}</Text>
-                      <Text style={styles.locAddr} numberOfLines={1}>{item.address}</Text>
-                    </View>
-                    {active && <Check color={Colors.secondary} size={18} strokeWidth={2.4} />}
-                  </TouchableOpacity>
-                );
-              }}
-            />
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.regionBadge}>
+                <Text style={styles.regionText}>📍 Você está em: {mockNeighborhood}</Text>
+              </View>
+              <Text style={styles.locSectionHeader}>Próximos de você</Text>
+              {SP_LOCATIONS.filter(l => l.neighborhood === mockNeighborhood).map(item => (
+                <LocationRow key={item.id} item={item} selected={item.id === selectedLocation.id} onPress={() => { setSelectedLocation(item); setLocationOpen(false); }} />
+              ))}
+              <Text style={styles.locSectionHeader}>Outros bairros</Text>
+              {SP_LOCATIONS.filter(l => l.neighborhood !== mockNeighborhood).map(item => (
+                <LocationRow key={item.id} item={item} selected={item.id === selectedLocation.id} onPress={() => { setSelectedLocation(item); setLocationOpen(false); }} />
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -448,5 +455,29 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textDisabled,
     marginTop: 2,
+  },
+  regionBadge: {
+    margin: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: 'rgba(255,45,120,0.1)',
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255,45,120,0.25)',
+    alignSelf: 'flex-start',
+  },
+  regionText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.secondary,
+  },
+  locSectionHeader: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm,
   },
 });

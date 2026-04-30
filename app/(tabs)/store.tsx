@@ -7,17 +7,18 @@ import { MOCK_REWARDS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import type { Reward } from '@/types';
 
-const EARN_WAYS: Array<{ Icon: LucideIcon; label: string; points: string }> = [
-  { Icon: Camera, label: 'Postar foto', points: '+30' },
-  { Icon: MapPin, label: 'Check-in no lugar', points: '+10' },
-  { Icon: Heart, label: 'Receber reacao', points: '+5' },
-  { Icon: Users, label: 'Novo seguidor', points: '+15' },
+const EARN_WAYS: Array<{ id: string; Icon: LucideIcon; label: string; points: number }> = [
+  { id: 'post', Icon: Camera, label: 'Postar foto', points: 30 },
+  { id: 'checkin', Icon: MapPin, label: 'Check-in no lugar', points: 10 },
+  { id: 'reaction', Icon: Heart, label: 'Receber reacao', points: 5 },
+  { id: 'follow', Icon: Users, label: 'Novo seguidor', points: 15 },
 ];
 
 export default function StoreScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
-  const userPoints = 1240;
+  const [userPoints, setUserPoints] = useState(0);
+  const [collected, setCollected] = useState<Set<string>>(new Set());
   const [redeemReward, setRedeemReward] = useState<Reward | null>(null);
   const [redeemed, setRedeemed] = useState(false);
 
@@ -50,7 +51,22 @@ export default function StoreScreen() {
                 <View key={item.label} style={styles.earnCard}>
                   <item.Icon color={Colors.secondary} size={24} strokeWidth={2.2} />
                   <Text style={styles.earnLabel}>{item.label}</Text>
-                  <Text style={styles.earnPoints}>{item.points}</Text>
+                  <View style={styles.earnBottom}>
+                    <Text style={styles.earnPoints}>+{item.points} pts</Text>
+                    <TouchableOpacity
+                      style={[styles.collectBtn, collected.has(item.id) && styles.collectBtnDone]}
+                      onPress={() => {
+                        if (!collected.has(item.id)) {
+                          setCollected(prev => new Set([...prev, item.id]));
+                          setUserPoints(prev => prev + item.points);
+                        }
+                      }}
+                      disabled={collected.has(item.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.collectBtnText}>{collected.has(item.id) ? '✓' : 'Coletar'}</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ))}
             </View>
@@ -236,6 +252,27 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.headingMedium,
     fontSize: FontSize.md,
     color: Colors.secondary,
+  },
+  earnBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  collectBtn: {
+    height: 26,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collectBtnDone: {
+    backgroundColor: Colors.surfaceElevated,
+  },
+  collectBtnText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.white,
   },
   rewardCard: {
     width: '100%',

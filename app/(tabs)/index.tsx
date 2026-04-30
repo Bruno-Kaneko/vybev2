@@ -169,6 +169,7 @@ function MessagesDrawer({
   const currentH = useRef(SNAP_HALF);
   const snapHalfRef = useRef(SNAP_HALF);
   const snapFullRef = useRef(SNAP_FULL);
+  const slideAnim = useRef(new Animated.Value(400)).current;
 
   useEffect(() => {
     snapHalfRef.current = SNAP_HALF;
@@ -179,6 +180,8 @@ function MessagesDrawer({
     if (visible) {
       heightAnim.setValue(snapHalfRef.current);
       currentH.current = snapHalfRef.current;
+      slideAnim.setValue(400);
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 } as any).start();
     }
   }, [visible]);
 
@@ -208,10 +211,10 @@ function MessagesDrawer({
   ).current;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.drawerContainer}>
         <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: slideAnim }] }]}>
           <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
             <View style={styles.drawerHandle} />
           </View>
@@ -297,11 +300,14 @@ function NotificationsDrawer({
   const SNAP_HALF = Math.min(380, SCREEN_H * 0.55);
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
   const currentH = useRef(SNAP_HALF);
+  const slideAnim = useRef(new Animated.Value(400)).current;
 
   useEffect(() => {
     if (visible) {
       heightAnim.setValue(SNAP_HALF);
       currentH.current = SNAP_HALF;
+      slideAnim.setValue(400);
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 } as any).start();
     }
   }, [visible]);
 
@@ -328,10 +334,10 @@ function NotificationsDrawer({
   ).current;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.drawerContainer}>
         <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: slideAnim }] }]}>
           <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
             <View style={styles.drawerHandle} />
           </View>
@@ -407,12 +413,15 @@ function GrupoesDrawer({
   const SNAP_HALF = Math.min(400, SCREEN_H * 0.58);
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
   const currentH = useRef(SNAP_HALF);
+  const slideAnim = useRef(new Animated.Value(400)).current;
   const [dialog, setDialog] = useState<DialogConfig | null>(null);
 
   useEffect(() => {
     if (visible) {
       heightAnim.setValue(SNAP_HALF);
       currentH.current = SNAP_HALF;
+      slideAnim.setValue(400);
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 } as any).start();
     }
   }, [visible]);
 
@@ -439,10 +448,10 @@ function GrupoesDrawer({
   ).current;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.drawerContainer}>
         <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: slideAnim }] }]}>
           <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
             <View style={styles.drawerHandle} />
           </View>
@@ -785,7 +794,7 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
           </Animated.View>
 
           <TouchableOpacity
-            onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+            onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id, autoComment: '1' } })}
             style={styles.actionButton}
             activeOpacity={0.75}
           >
@@ -970,7 +979,7 @@ const styles = StyleSheet.create({
   },
   drawerBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'transparent',
   },
   drawerSheet: {
     backgroundColor: Colors.surface,

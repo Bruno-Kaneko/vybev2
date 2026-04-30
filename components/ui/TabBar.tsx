@@ -95,7 +95,6 @@ function TabItem({
         <Text style={[styles.tabLabel, isFocused && { color: Colors.secondary }]}>
           {label}
         </Text>
-        {isFocused && <View style={styles.activeDot} />}
       </Animated.View>
     </TouchableOpacity>
   );

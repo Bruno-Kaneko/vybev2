@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TextInput,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   Image,
   Platform,
@@ -45,6 +46,8 @@ export default function DiscoverScreen() {
   const responsive = useResponsive();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('Todos');
+  const [priceFilter, setPriceFilter] = useState<number | null>(null);
+  const [amenities, setAmenities] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
     return MOCK_PLACES.filter(p => {
@@ -55,9 +58,13 @@ export default function DiscoverScreen() {
         (activeCategory === 'Bar' && p.category === 'bar') ||
         (activeCategory === 'Evento' && p.category === 'event') ||
         (activeCategory === 'Lounge' && p.category === 'lounge');
-      return matchSearch && matchCat;
+      const matchPrice = priceFilter === null || p.priceLevel === priceFilter;
+      const matchMetro = !amenities.has('metro') || p.nearMetro;
+      const matchParking = !amenities.has('parking') || p.hasParking;
+      const matchSeating = !amenities.has('seating') || p.hasSeating;
+      return matchSearch && matchCat && matchPrice && matchMetro && matchParking && matchSeating;
     });
-  }, [activeCategory, search]);
+  }, [activeCategory, search, priceFilter, amenities]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -84,6 +91,10 @@ export default function DiscoverScreen() {
             setActiveCategory={setActiveCategory}
             count={filtered.length}
             maxWidth={responsive.contentMaxWidth}
+            priceFilter={priceFilter}
+            setPriceFilter={setPriceFilter}
+            amenities={amenities}
+            setAmenities={setAmenities}
           />
         }
         ListEmptyComponent={
@@ -108,6 +119,10 @@ function DiscoverHeader({
   setActiveCategory,
   count,
   maxWidth,
+  priceFilter,
+  setPriceFilter,
+  amenities,
+  setAmenities,
 }: {
   search: string;
   setSearch: (value: string) => void;
@@ -115,6 +130,10 @@ function DiscoverHeader({
   setActiveCategory: (value: Category) => void;
   count: number;
   maxWidth: number;
+  priceFilter: number | null;
+  setPriceFilter: (value: number | null) => void;
+  amenities: Set<string>;
+  setAmenities: (fn: (prev: Set<string>) => Set<string>) => void;
 }) {
   return (
     <View style={[styles.headerShell, { maxWidth }]}>
@@ -157,6 +176,49 @@ function DiscoverHeader({
           );
         }}
       />
+
+      {/* Price filter */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 40, flexGrow: 0, marginBottom: Spacing.sm }} contentContainerStyle={{ alignItems: 'center', gap: Spacing.sm, paddingRight: Spacing.xl }}>
+        {([null, 1, 2, 3, 4, 5] as Array<number | null>).map(p => (
+          <TouchableOpacity
+            key={String(p)}
+            onPress={() => setPriceFilter(priceFilter === p ? null : p)}
+            style={[styles.categoryPill, priceFilter === p && styles.categoryPillActive]}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.categoryText, priceFilter === p && styles.categoryTextActive]}>
+              {p === null ? 'Todos preços' : '$'.repeat(p)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Amenity toggles */}
+      <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg, flexWrap: 'wrap' }}>
+        {[
+          { key: 'metro', label: '🚇 Metrô perto' },
+          { key: 'parking', label: '🅿️ Estacionamento' },
+          { key: 'seating', label: '🪑 Lugar p/ sentar' },
+        ].map(item => {
+          const active = amenities.has(item.key);
+          return (
+            <TouchableOpacity
+              key={item.key}
+              onPress={() => {
+                setAmenities(prev => {
+                  const next = new Set(prev);
+                  active ? next.delete(item.key) : next.add(item.key);
+                  return next;
+                });
+              }}
+              style={[styles.categoryPill, active && styles.categoryPillActive]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{item.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       <View style={styles.mapPlaceholder}>
         <BlurView intensity={10} tint="dark" style={StyleSheet.absoluteFill} />
