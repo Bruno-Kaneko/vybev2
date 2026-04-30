@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { View, useWindowDimensions } from 'react-native';
-// This file is gitignored — exists only on local machine
-import { MAPBOX_PUBLIC_TOKEN } from '@/constants/mapbox-token';
 import type { Place } from '@/types';
+
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 
 const SP_CENTER: [number, number] = [-46.6416, -23.5505];
 
