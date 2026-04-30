@@ -32,12 +32,6 @@
       "expo-router",
       "expo-camera",
       [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsDownloadToken": "MAPBOX_SECRET_TOKEN_HERE"
-        }
-      ],
-      [
         "expo-image-picker",
         {
           "photosPermission": "O VYBE precisa acessar suas fotos para você postar na festa.",
