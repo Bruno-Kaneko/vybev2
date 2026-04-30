@@ -49,7 +49,8 @@ export default function PlaceProfileScreen() {
   const [following, setFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'info'>('posts');
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [parkingCardOpen, setParkingCardOpen] = useState(false);
+  const [metroPopup, setMetroPopup] = useState(false);
+  const [parkingPopup, setParkingPopup] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState<'address' | 'parking' | null>(null);
   const slideAnim = useRef(new Animated.Value(400)).current;
 
@@ -224,21 +225,24 @@ export default function PlaceProfileScreen() {
                   </View>
                 )}
                 <View style={styles.amenitiesGrid}>
-                  {extras.metro ? (
-                    <View style={[styles.amenityChip, styles.amenityChipActive, styles.amenityChipWide]}>
-                      <Text style={styles.amenityText}>🚇 Metrô {extras.metro.name}</Text>
-                      <Text style={styles.amenitySubText}>{extras.metro.distanceM}m</Text>
-                    </View>
+                  {(extras.metro || place.nearMetro) ? (
+                    <TouchableOpacity
+                      style={[styles.amenityChip, styles.amenityChipActive]}
+                      activeOpacity={0.75}
+                      onPress={() => extras.metro && setMetroPopup(true)}
+                    >
+                      <Text style={styles.amenityText}>🚇 Metrô</Text>
+                    </TouchableOpacity>
                   ) : (
-                    <View style={[styles.amenityChip, place.nearMetro && styles.amenityChipActive]}>
-                      <Text style={styles.amenityText}>{place.nearMetro ? '🚇' : '✗'} Metrô</Text>
+                    <View style={styles.amenityChip}>
+                      <Text style={styles.amenityText}>✗ Metrô</Text>
                     </View>
                   )}
                   {place.hasParking ? (
                     <TouchableOpacity
                       style={[styles.amenityChip, styles.amenityChipActive]}
                       activeOpacity={0.75}
-                      onPress={() => setParkingCardOpen(prev => !prev)}
+                      onPress={() => extras.parking && setParkingPopup(true)}
                     >
                       <Text style={styles.amenityText}>🅿️ Estacionamento</Text>
                     </TouchableOpacity>
@@ -254,22 +258,6 @@ export default function PlaceProfileScreen() {
                     <Text style={styles.amenityText}>{place.hasMenu ? '📋' : '✗'} Cardápio</Text>
                   </View>
                 </View>
-                {parkingCardOpen && extras.parking && (
-                  <TouchableOpacity
-                    style={styles.parkingCard}
-                    activeOpacity={0.8}
-                    onPress={() => { copyToClipboard(extras.parking!.address); showCopied('parking'); }}
-                  >
-                    <View style={styles.parkingCardLeft}>
-                      <Text style={styles.parkingCardName}>{extras.parking.name}</Text>
-                      <Text style={styles.parkingCardAddr}>{extras.parking.address}</Text>
-                    </View>
-                    {copiedMsg === 'parking'
-                      ? <Text style={styles.copiedText}>Endereço copiado!</Text>
-                      : <Copy color={Colors.textMuted} size={16} strokeWidth={2.2} />
-                    }
-                  </TouchableOpacity>
-                )}
                 {(place.tags ?? []).length > 0 && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Tags</Text>
@@ -338,6 +326,54 @@ export default function PlaceProfileScreen() {
             ))}
           </Animated.View>
         </View>
+      </Modal>
+
+      {/* Metro popup */}
+      <Modal visible={metroPopup} transparent animationType="fade" onRequestClose={() => setMetroPopup(false)}>
+        <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setMetroPopup(false)}>
+          <View style={styles.popupCard}>
+            <Text style={styles.popupEmoji}>🚇</Text>
+            <Text style={styles.popupTitle}>Metrô mais próximo</Text>
+            {extras.metro && (
+              <>
+                <Text style={styles.popupMain}>{extras.metro.name}</Text>
+                <Text style={styles.popupSub}>{extras.metro.distanceM} metros de distância</Text>
+              </>
+            )}
+            <TouchableOpacity style={styles.popupBtn} onPress={() => setMetroPopup(false)}>
+              <Text style={styles.popupBtnText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Parking popup */}
+      <Modal visible={parkingPopup} transparent animationType="fade" onRequestClose={() => setParkingPopup(false)}>
+        <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setParkingPopup(false)}>
+          <View style={styles.popupCard}>
+            <Text style={styles.popupEmoji}>🅿️</Text>
+            <Text style={styles.popupTitle}>Estacionamento mais próximo</Text>
+            {extras.parking && (
+              <>
+                <Text style={styles.popupMain}>{extras.parking.name}</Text>
+                <Text style={styles.popupSub}>{extras.parking.address}</Text>
+                <TouchableOpacity
+                  style={styles.popupCopyBtn}
+                  activeOpacity={0.8}
+                  onPress={() => { copyToClipboard(extras.parking!.address); showCopied('parking'); }}
+                >
+                  <Copy color={Colors.white} size={15} strokeWidth={2.2} />
+                  <Text style={styles.popupCopyText}>
+                    {copiedMsg === 'parking' ? 'Endereço copiado!' : 'Copiar endereço'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity style={[styles.popupBtn, { marginTop: Spacing.xs }]} onPress={() => setParkingPopup(false)}>
+              <Text style={styles.popupBtnText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -781,5 +817,74 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.heading,
     fontSize: FontSize.sm,
     color: Colors.gold,
+  },
+  // Info popups
+  popupOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing['2xl'],
+  },
+  popupCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing['2xl'],
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  popupEmoji: {
+    fontSize: 36,
+  },
+  popupTitle: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  popupMain: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+    textAlign: 'center',
+  },
+  popupSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  popupCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.secondary,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.sm,
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+  },
+  popupCopyText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.sm,
+    color: Colors.white,
+  },
+  popupBtn: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+  },
+  popupBtnText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
   },
 });

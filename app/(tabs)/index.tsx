@@ -9,6 +9,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Animated,
+  Easing,
   Share as NativeShare,
   Modal,
   Platform,
@@ -108,28 +109,23 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress }:
   onGrupoesPress: () => void;
   onNotifPress: () => void;
 }) {
-  const pulseScale = useRef(new Animated.Value(1)).current;
-  const ringScale = useRef(new Animated.Value(1)).current;
-  const ringOpacity = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
-        Animated.parallel([
-          Animated.spring(pulseScale, { toValue: 1.32, useNativeDriver: true, damping: 4, stiffness: 200 } as any),
-          Animated.timing(ringScale, { toValue: 1.9, duration: 500, useNativeDriver: true }),
-          Animated.timing(ringOpacity, { toValue: 0.6, duration: 150, useNativeDriver: true }),
-        ]),
-        Animated.parallel([
-          Animated.spring(pulseScale, { toValue: 1, useNativeDriver: true, damping: 4, stiffness: 200 } as any),
-          Animated.timing(ringScale, { toValue: 1, duration: 350, useNativeDriver: true }),
-          Animated.timing(ringOpacity, { toValue: 0, duration: 350, useNativeDriver: true }),
-        ]),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.delay(400),
       ])
     );
     pulse.start();
     return () => pulse.stop();
   }, []);
+
+  const pulseScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] });
+  const ringScale = pulseAnim.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 1.65, 1.8] });
+  const ringOpacity = pulseAnim.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 0.55, 0.35, 0] });
 
   return (
     <View style={[styles.header, { maxWidth, alignSelf: 'center', width: '100%' }]}>

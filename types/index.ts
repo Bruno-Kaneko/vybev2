@@ -4,6 +4,7 @@ export interface User {
   displayName: string;
   avatar: string;
   bio?: string;
+  instagram?: string;
   points: number;
   followers: number;
   following: number;

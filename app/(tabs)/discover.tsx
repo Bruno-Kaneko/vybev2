@@ -17,21 +17,25 @@ import {
   Beer,
   Camera,
   Grid2X2,
+  List,
   Map,
   Music,
   Search,
   Sparkles,
   Ticket,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react-native';
 
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_PLACES } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
+import PlaceMap from '@/components/ui/PlaceMap';
 import type { Place } from '@/types';
 
 type Category = 'Todos' | 'Balada' | 'Bar' | 'Evento' | 'Lounge';
+type ViewMode = 'list' | 'map';
 
 const CATEGORIES: Array<{ label: Category; Icon: LucideIcon }> = [
   { label: 'Todos', Icon: Grid2X2 },
@@ -48,6 +52,8 @@ export default function DiscoverScreen() {
   const [activeCategory, setActiveCategory] = useState<Category>('Todos');
   const [priceFilter, setPriceFilter] = useState<number | null>(null);
   const [amenities, setAmenities] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
   const filtered = useMemo(() => {
     return MOCK_PLACES.filter(p => {
@@ -66,6 +72,74 @@ export default function DiscoverScreen() {
     });
   }, [activeCategory, search, priceFilter, amenities]);
 
+  // Map mode
+  if (viewMode === 'map') {
+    return (
+      <View style={styles.root}>
+        <PlaceMap
+          places={filtered}
+          onSelect={place => setSelectedPlace(place)}
+          style={{ flex: 1 }}
+        />
+
+        {/* Floating top bar */}
+        <View style={[styles.mapTopBar, { top: insets.top + Spacing.md }]}>
+          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+          <Text style={styles.mapTopTitle}>{filtered.length} lugares</Text>
+          <TouchableOpacity
+            style={styles.viewTogglePill}
+            onPress={() => setViewMode('list')}
+            activeOpacity={0.8}
+          >
+            <List color={Colors.white} size={14} strokeWidth={2.2} />
+            <Text style={styles.viewToggleText}>Lista</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Selected place card */}
+        {selectedPlace && (
+          <TouchableOpacity
+            style={[styles.selectedCard, { bottom: insets.bottom + 106 }]}
+            activeOpacity={0.9}
+            onPress={() => {
+              router.push({ pathname: '/place/[id]', params: { id: selectedPlace.id } });
+              setSelectedPlace(null);
+            }}
+          >
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={styles.selectedCardInner}>
+              {selectedPlace.thumbnail ? (
+                <Image source={{ uri: selectedPlace.thumbnail }} style={styles.selectedThumb} />
+              ) : (
+                <View style={[styles.selectedThumb, styles.selectedThumbFallback]}>
+                  <Map color={Colors.textMuted} size={18} />
+                </View>
+              )}
+              <View style={styles.selectedInfo}>
+                <Text style={styles.selectedName} numberOfLines={1}>{selectedPlace.name}</Text>
+                <Text style={styles.selectedAddr} numberOfLines={1}>{selectedPlace.address}</Text>
+                <View style={styles.selectedStats}>
+                  <Users color={Colors.textMuted} size={12} strokeWidth={2} />
+                  <Text style={styles.selectedStat}>{selectedPlace.activeUsers} pessoas agora</Text>
+                </View>
+              </View>
+              <View style={styles.selectedArrow}>
+                <Text style={styles.selectedArrowText}>›</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.selectedClose}
+              onPress={e => { e.stopPropagation(); setSelectedPlace(null); }}
+            >
+              <X color={Colors.textMuted} size={16} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  // List mode
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <FlatList
@@ -95,6 +169,8 @@ export default function DiscoverScreen() {
             setPriceFilter={setPriceFilter}
             amenities={amenities}
             setAmenities={setAmenities}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
           />
         }
         ListEmptyComponent={
@@ -123,6 +199,8 @@ function DiscoverHeader({
   setPriceFilter,
   amenities,
   setAmenities,
+  viewMode,
+  setViewMode,
 }: {
   search: string;
   setSearch: (value: string) => void;
@@ -134,12 +212,33 @@ function DiscoverHeader({
   setPriceFilter: (value: number | null) => void;
   amenities: Set<string>;
   setAmenities: (fn: (prev: Set<string>) => Set<string>) => void;
+  viewMode: ViewMode;
+  setViewMode: (v: ViewMode) => void;
 }) {
   return (
     <View style={[styles.headerShell, { maxWidth }]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Buscar</Text>
-        <Text style={styles.subtitle}>O que ta rolando agora</Text>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.title}>Buscar</Text>
+          <Text style={styles.subtitle}>O que ta rolando agora</Text>
+        </View>
+        {/* View mode toggle */}
+        <View style={styles.viewToggle}>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode('list')}
+            activeOpacity={0.8}
+          >
+            <List color={viewMode === 'list' ? Colors.white : Colors.textMuted} size={15} strokeWidth={2.2} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, viewMode === 'map' && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode('map')}
+            activeOpacity={0.8}
+          >
+            <Map color={viewMode === 'map' ? Colors.white : Colors.textMuted} size={15} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.searchWrapper}>
@@ -220,13 +319,6 @@ function DiscoverHeader({
         })}
       </View>
 
-      <View style={styles.mapPlaceholder}>
-        <BlurView intensity={10} tint="dark" style={StyleSheet.absoluteFill} />
-        <Map color={Colors.secondary} size={38} strokeWidth={1.9} />
-        <Text style={styles.mapText}>Mapa interativo</Text>
-        <Text style={styles.mapSub}>Integracao com Google Maps em breve</Text>
-      </View>
-
       <Text style={styles.sectionLabel}>{count} lugares encontrados</Text>
     </View>
   );
@@ -293,6 +385,13 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingBottom: Spacing.lg,
+    paddingTop: Spacing.md,
+  },
   header: {
     paddingBottom: Spacing.lg,
     paddingTop: Spacing.md,
@@ -307,6 +406,26 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textMuted,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 3,
+    gap: 2,
+    marginTop: Spacing.sm,
+  },
+  viewToggleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggleBtnActive: {
+    backgroundColor: Colors.secondary,
   },
   searchWrapper: {
     flexDirection: 'row',
@@ -361,29 +480,6 @@ const styles = StyleSheet.create({
   },
   categoryTextActive: {
     color: Colors.white,
-  },
-  mapPlaceholder: {
-    height: 156,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.lg,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: Spacing.xs,
-  },
-  mapText: {
-    fontFamily: FontFamily.headingMedium,
-    fontSize: FontSize.lg,
-    color: Colors.white,
-  },
-  mapSub: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.sm,
-    color: Colors.textMuted,
-    textAlign: 'center',
   },
   sectionLabel: {
     fontFamily: FontFamily.bodySemiBold,
@@ -502,5 +598,115 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: 'center',
+  },
+  // Map mode
+  mapTopBar: {
+    position: 'absolute',
+    left: Spacing.xl,
+    right: Spacing.xl,
+    height: 46,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  mapTopTitle: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.white,
+  },
+  viewTogglePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.secondary,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  viewToggleText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.white,
+  },
+  selectedCard: {
+    position: 'absolute',
+    left: Spacing.xl,
+    right: Spacing.xl,
+    borderRadius: Radius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  selectedCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    paddingRight: Spacing['2xl'] + 16,
+  },
+  selectedThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surfaceElevated,
+    flexShrink: 0,
+  },
+  selectedThumbFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  selectedName: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
+    color: Colors.white,
+  },
+  selectedAddr: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
+  selectedStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  selectedStat: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
+  selectedArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  selectedArrowText: {
+    color: Colors.white,
+    fontSize: 18,
+    lineHeight: 22,
+  },
+  selectedClose: {
+    position: 'absolute',
+    top: Spacing.sm,
+    right: Spacing.sm,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Linking,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Grid3X3, MapPin, MessageCircle } from 'lucide-react-native';
+import { ChevronLeft, Grid3X3, Instagram, MapPin, MessageCircle } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
@@ -49,6 +50,16 @@ export default function ProfileScreen() {
           <Text style={styles.displayName}>{user.displayName}</Text>
           <Text style={styles.username}>@{user.username}</Text>
           {user.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
+          {user.instagram ? (
+            <TouchableOpacity
+              style={styles.instagramRow}
+              activeOpacity={0.75}
+              onPress={() => Linking.openURL(`https://instagram.com/${user.instagram}`)}
+            >
+              <Instagram color={Colors.textMuted} size={14} strokeWidth={2} />
+              <Text style={styles.instagramHandle}>@{user.instagram}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.statsRow}>
@@ -158,6 +169,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.sm,
     lineHeight: FontSize.md * 1.5,
+  },
+  instagramRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  instagramHandle: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
   },
   statsRow: {
     flexDirection: 'row',
