@@ -1,18 +1,16 @@
-import React, { useEffect, useRef } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, useWindowDimensions, StyleSheet } from 'react-native';
+import { Colors, FontFamily, FontSize } from '@/constants';
 import type { Place } from '@/types';
 
-// Public token — safe for client code (restrict by domain in Mapbox dashboard)
-const _t = ['pk.eyJ1IjoidnliZWFwcCIsImEiOiJjbW9s','dG8xdjkwbzdjMnNwcXFxYnU5Zzd3In0.',
-  '0ov8B4x2Oaw-JBOWlsJvJw'];
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || _t.join('');
-
 const SP_CENTER: [number, number] = [-46.6416, -23.5505];
+const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+const MLG_VER = '3.6.2';
+const CDN = `https://cdn.jsdelivr.net/npm/maplibre-gl@${MLG_VER}/dist`;
 
 export default function PlaceMap({
   places,
   onSelect,
-  style,
 }: {
   places: Place[];
   onSelect: (place: Place) => void;
@@ -21,25 +19,31 @@ export default function PlaceMap({
   const containerRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const { width, height } = useWindowDimensions();
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
-    const initMap = () => {
-      const mgl = (window as any).mapboxgl;
-      if (!mgl || !containerRef.current || mapRef.current) return;
+    const buildMap = (mgl: any) => {
+      if (!containerRef.current || mapRef.current) return;
 
-      mgl.accessToken = MAPBOX_PUBLIC_TOKEN;
-
-      const map = new mgl.Map({
-        container: containerRef.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: SP_CENTER,
-        zoom: 13,
-        attributionControl: false,
-      });
-
-      map.addControl(new mgl.AttributionControl({ compact: true }), 'bottom-right');
+      let map: any;
+      try {
+        map = new mgl.Map({
+          container: containerRef.current,
+          style: STYLE_URL,
+          center: SP_CENTER,
+          zoom: 13,
+          attributionControl: false,
+          trackResize: true,
+        });
+      } catch (e) {
+        setStatus('error');
+        return;
+      }
 
       map.on('load', () => {
+        setStatus('ready');
+        map.addControl(new mgl.AttributionControl({ compact: true }), 'bottom-right');
+
         places.forEach(place => {
           const el = document.createElement('div');
           el.style.cssText = [
@@ -65,28 +69,39 @@ export default function PlaceMap({
         });
       });
 
+      map.on('error', () => setStatus('error'));
       mapRef.current = map;
     };
 
-    // Inject CSS once
-    if (!document.getElementById('mapbox-gl-css')) {
-      const link = document.createElement('link');
-      link.id = 'mapbox-gl-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.css';
-      document.head.appendChild(link);
-    }
+    const loadAndInit = () => {
+      if (!document.getElementById('mgl-css')) {
+        const link = document.createElement('link');
+        link.id = 'mgl-css';
+        link.rel = 'stylesheet';
+        link.href = `${CDN}/maplibre-gl.css`;
+        document.head.appendChild(link);
+      }
 
-    // Load JS once, then init
-    if ((window as any).mapboxgl) {
-      initMap();
-    } else if (!document.getElementById('mapbox-gl-js')) {
-      const script = document.createElement('script');
-      script.id = 'mapbox-gl-js';
-      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.js';
-      script.onload = initMap;
-      document.head.appendChild(script);
-    }
+      const existing = (window as any).maplibregl;
+      if (existing) {
+        buildMap(existing);
+      } else if (!document.getElementById('mgl-js')) {
+        const script = document.createElement('script');
+        script.id = 'mgl-js';
+        script.src = `${CDN}/maplibre-gl.js`;
+        script.onload = () => buildMap((window as any).maplibregl);
+        script.onerror = () => setStatus('error');
+        document.head.appendChild(script);
+      } else {
+        let attempts = 0;
+        const check = setInterval(() => {
+          if ((window as any).maplibregl) { clearInterval(check); buildMap((window as any).maplibregl); }
+          if (++attempts > 30) { clearInterval(check); setStatus('error'); }
+        }, 200);
+      }
+    };
+
+    loadAndInit();
 
     return () => {
       mapRef.current?.remove();
@@ -94,10 +109,55 @@ export default function PlaceMap({
     };
   }, []);
 
+  if (status === 'error') {
+    return (
+      <View style={[styles.fallback, { width, height }]}>
+        <Text style={styles.fallbackText}>Não foi possível carregar o mapa</Text>
+        <Text style={styles.fallbackSub}>Verifique sua conexão</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={{ width, height, overflow: 'hidden' }}>
+    <View style={{ width, height, backgroundColor: Colors.background }}>
+      {status === 'loading' && (
+        <View style={styles.loadingOverlay}>
+          <Text style={styles.loadingText}>Carregando mapa...</Text>
+        </View>
+      )}
       {/* @ts-ignore */}
       <div ref={containerRef} style={{ width: `${width}px`, height: `${height}px` }} />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  fallback: {
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  fallbackText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.white,
+  },
+  fallbackSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  loadingText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+});
