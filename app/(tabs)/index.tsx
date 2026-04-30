@@ -280,11 +280,11 @@ function DrawerChatRow({ chat, onClose }: { chat: Chat; onClose: () => void }) {
 }
 
 const MOCK_NOTIFS = [
-  { id: 'n1', type: 'like', user: 'Ana Lima', text: 'curtiu seu post', time: Date.now() - 3 * 60000 },
-  { id: 'n2', type: 'follow', user: 'Pedro S.', text: 'começou a te seguir', time: Date.now() - 12 * 60000 },
-  { id: 'n3', type: 'like', user: 'Julia M.', text: 'curtiu seu post', time: Date.now() - 28 * 60000 },
-  { id: 'n4', type: 'follow', user: 'Caio R.', text: 'começou a te seguir', time: Date.now() - 60 * 60000 },
-  { id: 'n5', type: 'like', user: 'Bianca T.', text: 'e mais 4 pessoas curtiram seu post', time: Date.now() - 2 * 60 * 60000 },
+  { id: 'n1', type: 'like', user: 'Ana Lima', text: 'curtiu seu post', time: Date.now() - 3 * 60000, link: '/post/p1' },
+  { id: 'n2', type: 'follow', user: 'Pedro S.', text: 'começou a te seguir', time: Date.now() - 12 * 60000, link: '/profile/u2' },
+  { id: 'n3', type: 'like', user: 'Julia M.', text: 'curtiu seu post', time: Date.now() - 28 * 60000, link: '/post/p2' },
+  { id: 'n4', type: 'follow', user: 'Caio R.', text: 'começou a te seguir', time: Date.now() - 60 * 60000, link: '/profile/u4' },
+  { id: 'n5', type: 'like', user: 'Bianca T.', text: 'e mais 4 pessoas curtiram seu post', time: Date.now() - 2 * 60 * 60000, link: '/post/p1' },
 ];
 
 function NotificationsDrawer({
@@ -356,7 +356,14 @@ function NotificationsDrawer({
               const mins = Math.floor(diff / 60000);
               const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
               return (
-                <View style={styles.drawerRow}>
+                <TouchableOpacity
+                  style={styles.drawerRow}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    onClose();
+                    if (item.link) router.push(item.link as any);
+                  }}
+                >
                   <View style={[styles.notifIcon, { backgroundColor: item.type === 'like' ? 'rgba(255,45,120,0.15)' : 'rgba(123,47,255,0.15)' }]}>
                     <Text style={styles.notifEmoji}>{item.type === 'like' ? '❤️' : '👤'}</Text>
                   </View>
@@ -367,7 +374,7 @@ function NotificationsDrawer({
                     </Text>
                     <Text style={styles.drawerRowTime}>{timeStr}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             }}
           />

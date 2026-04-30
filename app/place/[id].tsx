@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking, Modal, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking, Modal, Animated, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import {
   Camera,
   ChevronLeft,
   Clock,
+  Copy,
   Grid2X2,
   Heart,
   Info,
@@ -17,15 +18,29 @@ import {
   Share2,
   X,
 } from 'lucide-react-native';
+import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
+import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
+import { useResponsive } from '@/hooks/useResponsive';
+
+const PLACE_EXTRAS: Record<string, { parking?: { name: string; address: string }; metro?: { name: string; distanceM: number } }> = {
+  p1: { parking: { name: 'Estacionamento Fama', address: 'R. Bela Cintra, 210 — Consolação' }, metro: { name: 'Consolação', distanceM: 320 } },
+  p2: { parking: { name: 'Park Vila Olímpia', address: 'R. Olimpíadas, 66 — Vila Olímpia' }, metro: { name: 'Vila Olímpia', distanceM: 180 } },
+  p3: { parking: { name: 'Estacionamento Central', address: 'Av. Rebouças, 3970 — Pinheiros' }, metro: { name: 'Fradique Coutinho', distanceM: 450 } },
+  p4: { parking: { name: 'Park Augusta', address: 'R. Augusta, 880 — Consolação' }, metro: { name: 'Paulista', distanceM: 600 } },
+  p5: { parking: { name: 'Estacionamento Vila Madalena', address: 'R. Harmonia, 140 — Vila Madalena' }, metro: { name: 'Vila Madalena', distanceM: 390 } },
+};
+
+function copyToClipboard(text: string) {
+  if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+    navigator.clipboard?.writeText(text).catch(() => {});
+  }
+}
 
 const MOCK_EVENTS = [
   { id: 'e1', date: 'Sex, 02 Mai', time: '23:00', title: 'Open Format Night', dj: 'DJ Marquinhos', price: 'R$ 40' },
   { id: 'e2', date: 'Sáb, 03 Mai', time: '22:00', title: 'Techno Session', dj: 'ANNA b Savage', price: 'R$ 80' },
   { id: 'e3', date: 'Sex, 09 Mai', time: '23:00', title: 'House Lovers', dj: 'Djeff', price: 'R$ 50' },
 ];
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
-import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
-import { useResponsive } from '@/hooks/useResponsive';
 
 export default function PlaceProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,7 +49,14 @@ export default function PlaceProfileScreen() {
   const [following, setFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'info'>('posts');
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [parkingCardOpen, setParkingCardOpen] = useState(false);
+  const [copiedMsg, setCopiedMsg] = useState<'address' | 'parking' | null>(null);
   const slideAnim = useRef(new Animated.Value(400)).current;
+
+  const showCopied = (type: 'address' | 'parking') => {
+    setCopiedMsg(type);
+    setTimeout(() => setCopiedMsg(null), 2000);
+  };
 
   useEffect(() => {
     if (scheduleOpen) {
@@ -44,6 +66,7 @@ export default function PlaceProfileScreen() {
   }, [scheduleOpen]);
 
   const place = MOCK_PLACES.find(item => item.id === id) ?? MOCK_PLACES[0];
+  const extras = PLACE_EXTRAS[place.id] ?? {};
   const placePosts = MOCK_POSTS.filter(post => post.placeId === place.id);
   const initials = useMemo(() => getInitials(place.name), [place.name]);
 
@@ -151,17 +174,21 @@ export default function PlaceProfileScreen() {
               </View>
             ) : (
               <View style={styles.infoTab}>
-                {place.description ? (
-                  <View style={styles.infoBlock}>
-                    <Text style={styles.infoLabel}>Sobre</Text>
-                    <Text style={styles.infoText}>{place.description}</Text>
-                  </View>
-                ) : null}
                 <View style={styles.infoBlock}>
                   <Text style={styles.infoLabel}>Endereço</Text>
                   <View style={styles.infoRow}>
                     <MapPin color={Colors.secondary} size={15} strokeWidth={2.2} />
-                    <Text style={styles.infoText}>{place.address}</Text>
+                    <Text style={[styles.infoText, { flex: 1 }]}>{place.address}</Text>
+                    <TouchableOpacity
+                      onPress={() => { copyToClipboard(place.address); showCopied('address'); }}
+                      style={styles.copyBtn}
+                      activeOpacity={0.7}
+                    >
+                      {copiedMsg === 'address'
+                        ? <Text style={styles.copiedText}>Copiado!</Text>
+                        : <Copy color={Colors.textMuted} size={15} strokeWidth={2.2} />
+                      }
+                    </TouchableOpacity>
                   </View>
                 </View>
                 <View style={styles.infoBlock}>
@@ -197,12 +224,29 @@ export default function PlaceProfileScreen() {
                   </View>
                 )}
                 <View style={styles.amenitiesGrid}>
-                  <View style={[styles.amenityChip, place.nearMetro && styles.amenityChipActive]}>
-                    <Text style={styles.amenityText}>{place.nearMetro ? '🚇' : '✗'} Metrô</Text>
-                  </View>
-                  <View style={[styles.amenityChip, place.hasParking && styles.amenityChipActive]}>
-                    <Text style={styles.amenityText}>{place.hasParking ? '🅿️' : '✗'} Estacionamento</Text>
-                  </View>
+                  {extras.metro ? (
+                    <View style={[styles.amenityChip, styles.amenityChipActive, styles.amenityChipWide]}>
+                      <Text style={styles.amenityText}>🚇 Metrô {extras.metro.name}</Text>
+                      <Text style={styles.amenitySubText}>{extras.metro.distanceM}m</Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.amenityChip, place.nearMetro && styles.amenityChipActive]}>
+                      <Text style={styles.amenityText}>{place.nearMetro ? '🚇' : '✗'} Metrô</Text>
+                    </View>
+                  )}
+                  {place.hasParking ? (
+                    <TouchableOpacity
+                      style={[styles.amenityChip, styles.amenityChipActive]}
+                      activeOpacity={0.75}
+                      onPress={() => setParkingCardOpen(prev => !prev)}
+                    >
+                      <Text style={styles.amenityText}>🅿️ Estacionamento</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.amenityChip}>
+                      <Text style={styles.amenityText}>✗ Estacionamento</Text>
+                    </View>
+                  )}
                   <View style={[styles.amenityChip, place.hasSeating && styles.amenityChipActive]}>
                     <Text style={styles.amenityText}>{place.hasSeating ? '🪑' : '✗'} Mesas</Text>
                   </View>
@@ -210,6 +254,22 @@ export default function PlaceProfileScreen() {
                     <Text style={styles.amenityText}>{place.hasMenu ? '📋' : '✗'} Cardápio</Text>
                   </View>
                 </View>
+                {parkingCardOpen && extras.parking && (
+                  <TouchableOpacity
+                    style={styles.parkingCard}
+                    activeOpacity={0.8}
+                    onPress={() => { copyToClipboard(extras.parking!.address); showCopied('parking'); }}
+                  >
+                    <View style={styles.parkingCardLeft}>
+                      <Text style={styles.parkingCardName}>{extras.parking.name}</Text>
+                      <Text style={styles.parkingCardAddr}>{extras.parking.address}</Text>
+                    </View>
+                    {copiedMsg === 'parking'
+                      ? <Text style={styles.copiedText}>Endereço copiado!</Text>
+                      : <Copy color={Colors.textMuted} size={16} strokeWidth={2.2} />
+                    }
+                  </TouchableOpacity>
+                )}
                 {(place.tags ?? []).length > 0 && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Tags</Text>
@@ -590,10 +650,56 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,45,120,0.35)',
     backgroundColor: 'rgba(255,45,120,0.08)',
   },
+  amenityChipWide: {
+    flexBasis: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   amenityText: {
     fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.xs,
     color: Colors.textMuted,
+  },
+  amenitySubText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.secondary,
+  },
+  copyBtn: {
+    padding: Spacing.xs,
+    marginLeft: Spacing.xs,
+  },
+  copiedText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.secondary,
+  },
+  parkingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,45,120,0.25)',
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  parkingCardLeft: {
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  parkingCardName: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.sm,
+    color: Colors.white,
+  },
+  parkingCardAddr: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
   // Agenda modal
   modalOverlay: {
