@@ -75,11 +75,11 @@ export default function DiscoverScreen() {
   // Map mode
   if (viewMode === 'map') {
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, styles.mapRoot]}>
         <PlaceMap
           places={filtered}
           onSelect={place => setSelectedPlace(place)}
-          style={{ flex: 1 }}
+          style={StyleSheet.absoluteFillObject}
         />
 
         {/* Floating top bar */}
@@ -377,6 +377,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  mapRoot: {
+    position: 'relative' as any,
   },
   listContent: {
     width: '100%',
