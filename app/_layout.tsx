@@ -51,7 +51,7 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, overflow: 'hidden' }}>
       <SafeAreaProvider>
         <AuthProvider>
           <RootNavigator />

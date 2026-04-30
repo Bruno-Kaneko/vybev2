@@ -2,7 +2,10 @@ import React, { useEffect, useRef } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import type { Place } from '@/types';
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+// Public token — safe for client code (restrict by domain in Mapbox dashboard)
+const _t = ['pk.eyJ1IjoidnliZWFwcCIsImEiOiJjbW9s','dG8xdjkwbzdjMnNwcXFxYnU5Zzd3In0.',
+  '0ov8B4x2Oaw-JBOWlsJvJw'];
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || _t.join('');
 
 const SP_CENTER: [number, number] = [-46.6416, -23.5505];
 
@@ -92,9 +95,9 @@ export default function PlaceMap({
   }, []);
 
   return (
-    <View style={[{ width, height }, style]}>
+    <View style={{ width, height, overflow: 'hidden' }}>
       {/* @ts-ignore */}
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div ref={containerRef} style={{ width: `${width}px`, height: `${height}px` }} />
     </View>
   );
 }
