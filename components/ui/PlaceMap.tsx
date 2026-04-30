@@ -45,8 +45,13 @@ export default function PlaceMap({
         map.addControl(new mgl.AttributionControl({ compact: true }), 'bottom-right');
 
         places.forEach(place => {
+          // outer: unstyled wrapper — MapLibre writes transform here for positioning
           const el = document.createElement('div');
-          el.style.cssText = [
+          el.style.cssText = 'width:40px;height:40px;';
+
+          // inner: visual pin with transition only for hover scale (not position)
+          const pin = document.createElement('div');
+          pin.style.cssText = [
             'width:40px', 'height:40px', 'border-radius:50%',
             'background:#FF2D78',
             'border:2.5px solid rgba(255,255,255,0.3)',
@@ -57,10 +62,12 @@ export default function PlaceMap({
             'transition:transform 0.15s ease',
             'font-family:-apple-system,BlinkMacSystemFont,sans-serif',
           ].join(';');
-          el.textContent = String(place.activeUsers);
-          el.title = place.name;
-          el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.2)'; });
-          el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
+          pin.textContent = String(place.activeUsers);
+          pin.title = place.name;
+
+          el.appendChild(pin);
+          el.addEventListener('mouseenter', () => { pin.style.transform = 'scale(1.2)'; });
+          el.addEventListener('mouseleave', () => { pin.style.transform = 'scale(1)'; });
           el.addEventListener('click', () => onSelect(place));
 
           new mgl.Marker({ element: el })
