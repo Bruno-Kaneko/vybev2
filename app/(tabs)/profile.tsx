@@ -43,6 +43,8 @@ export default function MyProfileScreen() {
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
+  const myPosts = MOCK_POSTS.filter(p => p.userId === user?.id);
+
   const rawUsername = localUsername ?? user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
   const username = rawUsername.replace(/^@/, '');
   const displayName = username;
@@ -238,26 +240,41 @@ export default function MyProfileScreen() {
           <Text style={styles.sectionTitle}>Posts</Text>
         </View>
 
-        <View style={[styles.postsGrid, { gap: thumbGap }]}>
-          {MOCK_POSTS.map(post => (
+        {myPosts.length === 0 ? (
+          <View style={styles.emptyPosts}>
+            <Camera color={Colors.textMuted} size={36} strokeWidth={1.5} />
+            <Text style={styles.emptyPostsTitle}>Nenhum post ainda</Text>
+            <Text style={styles.emptyPostsSub}>Compartilhe onde você está e apareça no feed</Text>
             <TouchableOpacity
-              key={post.id}
-              style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}
-              onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+              style={styles.emptyPostsBtn}
+              onPress={() => router.push('/(tabs)/camera')}
               activeOpacity={0.85}
             >
-              <Image source={{ uri: post.imageUrl }} style={styles.postThumbImg} resizeMode="cover" />
-              <LinearGradient
-                colors={['transparent', 'rgba(10,10,15,0.72)']}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.thumbMeta}>
-                <MapPin color={Colors.textMuted} size={11} strokeWidth={2.2} />
-                <Text style={styles.postThumbPlace} numberOfLines={1}>{post.placeName}</Text>
-              </View>
+              <Text style={styles.emptyPostsBtnText}>Criar post</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          </View>
+        ) : (
+          <View style={[styles.postsGrid, { gap: thumbGap }]}>
+            {myPosts.map(post => (
+              <TouchableOpacity
+                key={post.id}
+                style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}
+                onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+                activeOpacity={0.85}
+              >
+                <Image source={{ uri: post.imageUrl }} style={styles.postThumbImg} resizeMode="cover" />
+                <LinearGradient
+                  colors={['transparent', 'rgba(10,10,15,0.72)']}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.thumbMeta}>
+                  <MapPin color={Colors.textMuted} size={11} strokeWidth={2.2} />
+                  <Text style={styles.postThumbPlace} numberOfLines={1}>{post.placeName}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -395,6 +412,39 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: FontFamily.headingMedium,
     fontSize: FontSize.lg,
+    color: Colors.white,
+  },
+  emptyPosts: {
+    alignItems: 'center',
+    paddingVertical: Spacing['3xl'],
+    gap: Spacing.sm,
+  },
+  emptyPostsTitle: {
+    fontFamily: FontFamily.headingMedium,
+    fontSize: FontSize.lg,
+    color: Colors.white,
+    marginTop: Spacing.md,
+  },
+  emptyPostsSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingHorizontal: Spacing['2xl'],
+    lineHeight: FontSize.sm * 1.5,
+  },
+  emptyPostsBtn: {
+    marginTop: Spacing.md,
+    height: 42,
+    paddingHorizontal: Spacing['2xl'],
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyPostsBtnText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.sm,
     color: Colors.white,
   },
   postsGrid: {
