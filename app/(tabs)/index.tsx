@@ -12,6 +12,7 @@ import {
   Platform,
   PanResponder,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -28,6 +29,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [grupoesOpen, setGrupoesOpen] = useState(false);
+  const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string } | null>(null);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -62,6 +64,8 @@ export default function HomeScreen() {
         visible={grupoesOpen}
         onClose={() => setGrupoesOpen(false)}
         insets={insets}
+        joinedGroup={joinedGroup}
+        onJoin={g => setJoinedGroup(g)}
       />
     </View>
   );
@@ -73,18 +77,21 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress }: {
   onGrupoesPress: () => void;
 }) {
   const pulseScale = useRef(new Animated.Value(1)).current;
-  const pulseOpacity = useRef(new Animated.Value(0.7)).current;
+  const ringScale = useRef(new Animated.Value(1)).current;
+  const ringOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.parallel([
-          Animated.spring(pulseScale, { toValue: 1.18, useNativeDriver: true, damping: 6, stiffness: 120 } as any),
-          Animated.timing(pulseOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.spring(pulseScale, { toValue: 1.32, useNativeDriver: true, damping: 4, stiffness: 200 } as any),
+          Animated.timing(ringScale, { toValue: 1.9, duration: 500, useNativeDriver: true }),
+          Animated.timing(ringOpacity, { toValue: 0.6, duration: 150, useNativeDriver: true }),
         ]),
         Animated.parallel([
-          Animated.spring(pulseScale, { toValue: 1, useNativeDriver: true, damping: 6, stiffness: 120 } as any),
-          Animated.timing(pulseOpacity, { toValue: 0.7, duration: 400, useNativeDriver: true }),
+          Animated.spring(pulseScale, { toValue: 1, useNativeDriver: true, damping: 4, stiffness: 200 } as any),
+          Animated.timing(ringScale, { toValue: 1, duration: 350, useNativeDriver: true }),
+          Animated.timing(ringOpacity, { toValue: 0, duration: 350, useNativeDriver: true }),
         ]),
       ])
     );
@@ -96,16 +103,17 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress }: {
     <View style={[styles.header, { maxWidth, alignSelf: 'center', width: '100%' }]}>
       <BrandLogo width={118} height={38} />
       <View style={styles.headerActions}>
+        <TouchableOpacity style={[styles.iconButton, styles.groupButton]} activeOpacity={0.78} onPress={onGrupoesPress}>
+          <Animated.View style={[styles.groupRing, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
+          <Animated.View style={{ transform: [{ scale: pulseScale }] }}>
+            <Users color={Colors.secondary} size={18} strokeWidth={2.1} />
+          </Animated.View>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
           <Bell color={Colors.white} size={18} strokeWidth={2.1} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onMessagesPress}>
           <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.iconButton, styles.groupButton]} activeOpacity={0.78} onPress={onGrupoesPress}>
-          <Animated.View style={{ transform: [{ scale: pulseScale }], opacity: pulseOpacity }}>
-            <Users color={Colors.secondary} size={18} strokeWidth={2.1} />
-          </Animated.View>
         </TouchableOpacity>
       </View>
     </View>
@@ -247,10 +255,14 @@ function GrupoesDrawer({
   visible,
   onClose,
   insets,
+  joinedGroup,
+  onJoin,
 }: {
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
+  joinedGroup: { id: string; name: string } | null;
+  onJoin: (g: { id: string; name: string }) => void;
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
   const SNAP_HALF = Math.min(400, SCREEN_H * 0.58);
@@ -304,29 +316,67 @@ function GrupoesDrawer({
             data={MOCK_GRUPOS}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.drawerRow} activeOpacity={0.8}>
-                <View style={[styles.groupAvatar, { backgroundColor: Colors.surfaceElevated }]}>
-                  <Users color={Colors.secondary} size={22} strokeWidth={2} />
-                </View>
-                <View style={styles.drawerRowInfo}>
-                  <View style={styles.drawerRowTop}>
-                    <Text style={[styles.drawerRowName, item.unread > 0 && { color: Colors.white }]} numberOfLines={1}>
-                      {item.name}
+            renderItem={({ item }) => {
+              const isJoined = joinedGroup?.id === item.id;
+
+              const handlePress = () => {
+                if (isJoined) return;
+
+                if (joinedGroup !== null) {
+                  // Already in another group
+                  if (Platform.OS === 'web') {
+                    window.alert(`Você precisa sair do "${joinedGroup.name}" para poder entrar nesse grupão.`);
+                  } else {
+                    require('react-native').Alert.alert(
+                      'Você já está em um grupão',
+                      `Saia do "${joinedGroup.name}" para entrar em "${item.name}".`,
+                      [{ text: 'OK' }]
+                    );
+                  }
+                  return;
+                }
+
+                // Ask to join
+                if (Platform.OS === 'web') {
+                  if (window.confirm(`Deseja entrar no grupão "${item.name}"?`)) {
+                    onJoin({ id: item.id, name: item.name });
+                  }
+                } else {
+                  require('react-native').Alert.alert(
+                    'Entrar no grupão',
+                    `Deseja entrar em "${item.name}"?`,
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      { text: 'Entrar', onPress: () => onJoin({ id: item.id, name: item.name }) },
+                    ]
+                  );
+                }
+              };
+
+              return (
+                <TouchableOpacity style={[styles.drawerRow, isJoined && styles.drawerRowJoined]} activeOpacity={0.8} onPress={handlePress}>
+                  <View style={[styles.groupAvatar, isJoined && { borderColor: Colors.secondary, borderWidth: 2 }]}>
+                    <Users color={isJoined ? Colors.secondary : Colors.textMuted} size={22} strokeWidth={2} />
+                  </View>
+                  <View style={styles.drawerRowInfo}>
+                    <View style={styles.drawerRowTop}>
+                      <Text style={[styles.drawerRowName, (item.unread > 0 || isJoined) && { color: Colors.white }]} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.drawerRowTime}>{item.members} membros</Text>
+                    </View>
+                    <Text style={[styles.drawerRowPreview, item.unread > 0 && { color: Colors.text }]} numberOfLines={1}>
+                      {isJoined ? '✓ Você está neste grupão' : item.lastMsg}
                     </Text>
-                    <Text style={styles.drawerRowTime}>{item.members} membros</Text>
                   </View>
-                  <Text style={[styles.drawerRowPreview, item.unread > 0 && { color: Colors.text }]} numberOfLines={1}>
-                    {item.lastMsg}
-                  </Text>
-                </View>
-                {item.unread > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadText}>{item.unread}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            )}
+                  {item.unread > 0 && !isJoined && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadText}>{item.unread}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            }}
           />
         </Animated.View>
       </View>
@@ -442,7 +492,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   feedContent: {
-    gap: Spacing.lg,
+    gap: Spacing.xs,
   },
   header: {
     width: '100%',
@@ -471,6 +521,15 @@ const styles = StyleSheet.create({
   groupButton: {
     borderColor: 'rgba(255,45,120,0.35)',
     backgroundColor: 'rgba(255,45,120,0.08)',
+    overflow: 'visible',
+  },
+  groupRing: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: Colors.secondary,
   },
   postCard: {
     width: '100%',
@@ -637,6 +696,9 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  drawerRowJoined: {
+    backgroundColor: 'rgba(255,45,120,0.06)',
   },
   drawerAvatarWrap: {
     position: 'relative',

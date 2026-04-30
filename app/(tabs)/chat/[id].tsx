@@ -76,7 +76,7 @@ export default function ChatScreen() {
               onChangeText={setText}
               placeholder="Mensagem..."
               placeholderTextColor={Colors.textDisabled}
-              style={styles.input}
+              style={[styles.input, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
               returnKeyType="send"
               onSubmitEditing={send}
             />

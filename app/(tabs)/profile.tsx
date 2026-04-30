@@ -8,6 +8,9 @@ import {
   Image,
   Platform,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,15 +32,45 @@ export default function MyProfileScreen() {
   const [message, setMessage] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [localAvatar, setLocalAvatar] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUsername, setEditUsername] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [localUsername, setLocalUsername] = useState<string | null>(null);
+  const [localBio, setLocalBio] = useState<string | null>(null);
 
   const thumbGap = Spacing.xs;
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
-  const rawUsername = user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
+  const rawUsername = localUsername ?? user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
   const username = rawUsername.replace(/^@/, '');
   const displayName = username;
+  const bio = localBio ?? (user?.user_metadata?.bio as string | null) ?? null;
   const avatarUrl = localAvatar ?? (user?.user_metadata?.avatar_url as string | null) ?? null;
+
+  const openEdit = () => {
+    setEditUsername(username);
+    setEditBio(bio ?? '');
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editUsername.trim()) return;
+    setEditLoading(true);
+    try {
+      const cleanUsername = editUsername.trim().replace(/^@/, '');
+      await supabase.auth.updateUser({ data: { username: cleanUsername, bio: editBio.trim() } });
+      setLocalUsername(cleanUsername);
+      setLocalBio(editBio.trim() || null);
+      setMessage('Perfil atualizado!');
+      setEditOpen(false);
+    } catch {
+      setMessage('Erro ao salvar. Tente de novo.');
+    } finally {
+      setEditLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     const confirmed = Platform.OS === 'web'
@@ -155,10 +188,48 @@ export default function MyProfileScreen() {
 
         <VybeButton
           label="Editar perfil"
-          onPress={() => setMessage('Editor de perfil em breve.')}
+          onPress={openEdit}
           fullWidth
           style={styles.editBtn}
         />
+
+        <Modal visible={editOpen} transparent animationType="slide" onRequestClose={() => setEditOpen(false)}>
+          <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={styles.modalSheet}>
+              <Text style={styles.modalTitle}>Editar perfil</Text>
+
+              <Text style={styles.fieldLabel}>Nome de usuário</Text>
+              <View style={styles.fieldShell}>
+                <Text style={styles.atSign}>@</Text>
+                <TextInput
+                  value={editUsername}
+                  onChangeText={t => setEditUsername(t.replace(/\s/g, '').toLowerCase())}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={[styles.fieldInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
+                  placeholderTextColor={Colors.textDisabled}
+                />
+              </View>
+
+              <Text style={styles.fieldLabel}>Bio</Text>
+              <TextInput
+                value={editBio}
+                onChangeText={setEditBio}
+                placeholder="Uma frase sobre você..."
+                placeholderTextColor={Colors.textDisabled}
+                multiline
+                style={[styles.fieldTextarea, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.cancelBtn}>
+                  <Text style={styles.cancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <VybeButton label="Salvar" onPress={saveEdit} loading={editLoading} style={styles.saveBtn} />
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         {message ? <Text style={styles.feedback}>{message}</Text> : null}
 
@@ -353,5 +424,91 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: 9,
     color: Colors.textMuted,
+  },
+  // Edit modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    padding: Spacing['2xl'],
+    paddingBottom: Spacing['4xl'],
+    gap: Spacing.md,
+  },
+  modalTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize['2xl'],
+    color: Colors.white,
+    marginBottom: Spacing.sm,
+  },
+  fieldLabel: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  fieldShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    height: 50,
+  },
+  atSign: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    marginRight: 4,
+  },
+  fieldInput: {
+    flex: 1,
+    height: '100%',
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.text,
+  },
+  fieldTextarea: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.text,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cancelText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+  },
+  saveBtn: {
+    flex: 2,
   },
 });
