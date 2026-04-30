@@ -1,9 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
+// This file is gitignored — exists only on local machine
+import { MAPBOX_PUBLIC_TOKEN } from '@/constants/mapbox-token';
 import type { Place } from '@/types';
-
-let MAPBOX_TOKEN = '';
-try { MAPBOX_TOKEN = require('@/constants/mapbox-token').MAPBOX_PUBLIC_TOKEN; } catch {}
 
 const SP_CENTER: [number, number] = [-46.6416, -23.5505];
 
@@ -18,15 +17,14 @@ export default function PlaceMap({
 }) {
   const containerRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
-  const placesRef = useRef(places);
-  placesRef.current = places;
+  const { width, height } = useWindowDimensions();
 
   useEffect(() => {
     const initMap = () => {
       const mgl = (window as any).mapboxgl;
-      if (!mgl || !containerRef.current) return;
+      if (!mgl || !containerRef.current || mapRef.current) return;
 
-      mgl.accessToken = MAPBOX_TOKEN;
+      mgl.accessToken = MAPBOX_PUBLIC_TOKEN;
 
       const map = new mgl.Map({
         container: containerRef.current,
@@ -39,29 +37,23 @@ export default function PlaceMap({
       map.addControl(new mgl.AttributionControl({ compact: true }), 'bottom-right');
 
       map.on('load', () => {
-        placesRef.current.forEach(place => {
+        places.forEach(place => {
           const el = document.createElement('div');
-          el.style.cssText = `
-            width: 40px; height: 40px; border-radius: 50%;
-            background: #FF2D78;
-            border: 2.5px solid rgba(255,255,255,0.3);
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 12px; font-weight: 700; color: #fff;
-            box-shadow: 0 0 16px #FF2D7888;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-          `;
+          el.style.cssText = [
+            'width:40px', 'height:40px', 'border-radius:50%',
+            'background:#FF2D78',
+            'border:2.5px solid rgba(255,255,255,0.3)',
+            'cursor:pointer',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'font-size:12px', 'font-weight:700', 'color:#fff',
+            'box-shadow:0 0 16px #FF2D7880',
+            'transition:transform 0.15s ease',
+            'font-family:-apple-system,BlinkMacSystemFont,sans-serif',
+          ].join(';');
           el.textContent = String(place.activeUsers);
           el.title = place.name;
-          el.addEventListener('mouseenter', () => {
-            el.style.transform = 'scale(1.2)';
-            el.style.boxShadow = '0 0 24px #FF2D78bb';
-          });
-          el.addEventListener('mouseleave', () => {
-            el.style.transform = 'scale(1)';
-            el.style.boxShadow = '0 0 16px #FF2D7888';
-          });
+          el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.2)'; });
+          el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
           el.addEventListener('click', () => onSelect(place));
 
           new mgl.Marker({ element: el })
@@ -73,7 +65,7 @@ export default function PlaceMap({
       mapRef.current = map;
     };
 
-    // Inject Mapbox CSS
+    // Inject CSS once
     if (!document.getElementById('mapbox-gl-css')) {
       const link = document.createElement('link');
       link.id = 'mapbox-gl-css';
@@ -82,7 +74,7 @@ export default function PlaceMap({
       document.head.appendChild(link);
     }
 
-    // Load or reuse Mapbox JS
+    // Load JS once, then init
     if ((window as any).mapboxgl) {
       initMap();
     } else if (!document.getElementById('mapbox-gl-js')) {
@@ -100,20 +92,9 @@ export default function PlaceMap({
   }, []);
 
   return (
-    <View style={[styles.wrapper, style]}>
+    <View style={[{ width, height }, style]}>
       {/* @ts-ignore */}
-      <div
-        ref={containerRef}
-        style={{ position: 'absolute', inset: 0 }}
-      />
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    position: 'relative' as any,
-    overflow: 'hidden',
-  },
-});

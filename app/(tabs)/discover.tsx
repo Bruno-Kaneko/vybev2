@@ -75,11 +75,10 @@ export default function DiscoverScreen() {
   // Map mode
   if (viewMode === 'map') {
     return (
-      <View style={[styles.root, styles.mapRoot]}>
+      <View style={styles.root}>
         <PlaceMap
           places={filtered}
           onSelect={place => setSelectedPlace(place)}
-          style={StyleSheet.absoluteFillObject}
         />
 
         {/* Floating top bar */}
