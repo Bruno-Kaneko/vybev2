@@ -165,7 +165,7 @@ export default function MyProfileScreen() {
         <View style={styles.topRow}>
           <Text style={styles.title}>Perfil</Text>
           <View style={styles.topActions}>
-            <TouchableOpacity style={styles.iconButton} activeOpacity={0.8} onPress={() => setMessage('Preferencias em breve.')}>
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.8} onPress={() => router.push('/preferences' as any)}>
               <Settings color={Colors.white} size={20} strokeWidth={2.2} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton} activeOpacity={0.8} onPress={handleLogout}>
@@ -222,7 +222,7 @@ export default function MyProfileScreen() {
           style={styles.editBtn}
         />
 
-        <Modal visible={editOpen} transparent animationType="slide" onRequestClose={() => setEditOpen(false)}>
+        <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
           <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <View style={styles.modalSheet}>
               <Text style={styles.modalTitle}>Editar perfil</Text>
@@ -260,7 +260,7 @@ export default function MyProfileScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        <Modal visible={statusOpen} transparent animationType="slide" onRequestClose={() => setStatusOpen(false)}>
+        <Modal visible={statusOpen} transparent animationType="fade" onRequestClose={() => setStatusOpen(false)}>
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setStatusOpen(false)}>
             <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
               <Text style={styles.modalTitle}>Status de relacionamento</Text>

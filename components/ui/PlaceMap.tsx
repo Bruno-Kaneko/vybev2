@@ -4,7 +4,7 @@ import { Colors, FontFamily, FontSize } from '@/constants';
 import type { Place } from '@/types';
 
 const SP_CENTER: [number, number] = [-46.6416, -23.5505];
-const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+const STYLE_URL = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
 const MLG_VER = '3.6.2';
 const CDN = `https://cdn.jsdelivr.net/npm/maplibre-gl@${MLG_VER}/dist`;
 
@@ -133,7 +133,14 @@ export default function PlaceMap({
         </View>
       )}
       {/* @ts-ignore */}
-      <div ref={containerRef} style={{ width: `${width}px`, height: `${height}px` }} />
+      <div
+        ref={containerRef}
+        style={{
+          width: `${width}px`,
+          height: `${height}px`,
+          filter: 'brightness(0.68) saturate(0.65)',
+        }}
+      />
     </View>
   );
 }
