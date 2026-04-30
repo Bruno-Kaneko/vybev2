@@ -29,6 +29,7 @@ export default function HomeScreen() {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [grupoesOpen, setGrupoesOpen] = useState(false);
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string } | null>(null);
   const [groupChatOpen, setGroupChatOpen] = useState(false);
@@ -62,6 +63,7 @@ export default function HomeScreen() {
             maxWidth={responsive.feedMaxWidth}
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
+            onNotifPress={() => setNotifOpen(true)}
           />
         }
         renderItem={({ item }) => (
@@ -71,6 +73,11 @@ export default function HomeScreen() {
       <MessagesDrawer
         visible={messagesOpen}
         onClose={() => setMessagesOpen(false)}
+        insets={insets}
+      />
+      <NotificationsDrawer
+        visible={notifOpen}
+        onClose={() => setNotifOpen(false)}
         insets={insets}
       />
       <GrupoesDrawer
@@ -95,10 +102,11 @@ export default function HomeScreen() {
   );
 }
 
-function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress }: {
+function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress }: {
   maxWidth: number;
   onMessagesPress: () => void;
   onGrupoesPress: () => void;
+  onNotifPress: () => void;
 }) {
   const pulseScale = useRef(new Animated.Value(1)).current;
   const ringScale = useRef(new Animated.Value(1)).current;
@@ -133,7 +141,7 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress }: {
             <Users color={Colors.secondary} size={18} strokeWidth={2.1} />
           </Animated.View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton} activeOpacity={0.78}>
+        <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onNotifPress}>
           <Bell color={Colors.white} size={18} strokeWidth={2.1} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onMessagesPress}>
@@ -265,6 +273,101 @@ function DrawerChatRow({ chat, onClose }: { chat: Chat; onClose: () => void }) {
         </Text>
       </View>
     </TouchableOpacity>
+  );
+}
+
+const MOCK_NOTIFS = [
+  { id: 'n1', type: 'like', user: 'Ana Lima', text: 'curtiu seu post', time: Date.now() - 3 * 60000 },
+  { id: 'n2', type: 'follow', user: 'Pedro S.', text: 'começou a te seguir', time: Date.now() - 12 * 60000 },
+  { id: 'n3', type: 'like', user: 'Julia M.', text: 'curtiu seu post', time: Date.now() - 28 * 60000 },
+  { id: 'n4', type: 'follow', user: 'Caio R.', text: 'começou a te seguir', time: Date.now() - 60 * 60000 },
+  { id: 'n5', type: 'like', user: 'Bianca T.', text: 'e mais 4 pessoas curtiram seu post', time: Date.now() - 2 * 60 * 60000 },
+];
+
+function NotificationsDrawer({
+  visible,
+  onClose,
+  insets,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  insets: { bottom: number; top: number };
+}) {
+  const { height: SCREEN_H } = useWindowDimensions();
+  const SNAP_HALF = Math.min(380, SCREEN_H * 0.55);
+  const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
+  const currentH = useRef(SNAP_HALF);
+
+  useEffect(() => {
+    if (visible) {
+      heightAnim.setValue(SNAP_HALF);
+      currentH.current = SNAP_HALF;
+    }
+  }, [visible]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderMove: (_, g) => {
+        heightAnim.setValue(Math.max(180, Math.min(SCREEN_H, currentH.current - g.dy)));
+      },
+      onPanResponderRelease: (_, g) => {
+        const next = currentH.current - g.dy;
+        if (g.vy > 0.5 || next < SNAP_HALF * 0.55) {
+          onClose();
+        } else if (g.vy < -0.5 || next > (SNAP_HALF + SCREEN_H) / 2) {
+          Animated.spring(heightAnim, { toValue: SCREEN_H, useNativeDriver: false, damping: 18, stiffness: 180 } as any).start();
+          currentH.current = SCREEN_H;
+        } else {
+          Animated.spring(heightAnim, { toValue: SNAP_HALF, useNativeDriver: false, damping: 18, stiffness: 180 } as any).start();
+          currentH.current = SNAP_HALF;
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.drawerContainer}>
+        <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
+          <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
+            <View style={styles.drawerHandle} />
+          </View>
+          <View style={styles.drawerHeader}>
+            <Text style={styles.drawerTitle}>Notificações</Text>
+            <TouchableOpacity onPress={onClose} style={styles.drawerClose}>
+              <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={MOCK_NOTIFS}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const diff = Date.now() - item.time;
+              const mins = Math.floor(diff / 60000);
+              const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
+              return (
+                <View style={styles.drawerRow}>
+                  <View style={[styles.notifIcon, { backgroundColor: item.type === 'like' ? 'rgba(255,45,120,0.15)' : 'rgba(123,47,255,0.15)' }]}>
+                    <Text style={styles.notifEmoji}>{item.type === 'like' ? '❤️' : '👤'}</Text>
+                  </View>
+                  <View style={styles.drawerRowInfo}>
+                    <Text style={styles.drawerRowName} numberOfLines={2}>
+                      <Text style={{ color: Colors.white }}>{item.user}</Text>
+                      {' '}{item.text}
+                    </Text>
+                    <Text style={styles.drawerRowTime}>{timeStr}</Text>
+                  </View>
+                </View>
+              );
+            }}
+          />
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
@@ -633,22 +736,31 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
       isPhone ? styles.postCardPhone : { maxWidth, alignSelf: 'center', width: '100%' },
     ]}>
       <View style={styles.postHeader}>
-        <TouchableOpacity
-          style={styles.authorRow}
-          onPress={() => router.push(`/profile/${post.userId}`)}
-          activeOpacity={0.85}
-        >
-          <Avatar uri={post.user.avatar} size="sm" withGradientBorder />
-          <View style={styles.authorText}>
-            <View style={styles.authorLine}>
-              <Text style={styles.displayName} numberOfLines={1}>{post.user.displayName}</Text>
-              <View style={styles.locationInline}>
-                <MapPin color={Colors.secondary} size={13} strokeWidth={2.4} />
-                <Text style={styles.locationText} numberOfLines={1}>{post.placeName}</Text>
-              </View>
+        <View style={styles.authorRow}>
+          <TouchableOpacity
+            style={styles.authorAvatarName}
+            onPress={() => router.push(`/profile/${post.userId}`)}
+            activeOpacity={0.85}
+          >
+            <Avatar uri={post.user.avatar} size="sm" withGradientBorder />
+            <Text style={styles.displayName} numberOfLines={1}>{post.user.displayName}</Text>
+          </TouchableOpacity>
+          {post.placeId ? (
+            <TouchableOpacity
+              style={styles.locationInline}
+              onPress={() => router.push({ pathname: '/place/[id]', params: { id: post.placeId! } })}
+              activeOpacity={0.75}
+            >
+              <MapPin color={Colors.secondary} size={13} strokeWidth={2.4} />
+              <Text style={styles.locationText} numberOfLines={1}>{post.placeName}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.locationInline}>
+              <MapPin color={Colors.secondary} size={13} strokeWidth={2.4} />
+              <Text style={styles.locationText} numberOfLines={1}>{post.placeName}</Text>
             </View>
-          </View>
-        </TouchableOpacity>
+          )}
+        </View>
 
         <View style={styles.headerRight}>
           <PostTimer expiresAt={post.expiresAt} compact />
@@ -772,19 +884,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+    flexWrap: 'wrap',
   },
-  authorText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  authorLine: {
+  authorAvatarName: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-    minWidth: 0,
+    gap: Spacing.sm,
+    flexShrink: 0,
   },
   displayName: {
-    flexShrink: 1,
     fontFamily: FontFamily.bodySemiBold,
     fontSize: FontSize.sm,
     color: Colors.white,
@@ -964,6 +1072,17 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textMuted,
+  },
+  notifIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  notifEmoji: {
+    fontSize: 18,
   },
   groupAvatar: {
     width: 46,

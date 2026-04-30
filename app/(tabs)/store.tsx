@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Beer, Camera, Crown, Gift, Heart, MapPin, Ticket, Users, type LucideIcon } from 'lucide-react-native';
+import { Beer, Camera, Check, Crown, Gift, Heart, MapPin, Ticket, Users, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_REWARDS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -18,6 +18,8 @@ export default function StoreScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const userPoints = 1240;
+  const [redeemReward, setRedeemReward] = useState<Reward | null>(null);
+  const [redeemed, setRedeemed] = useState(false);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -58,15 +60,82 @@ export default function StoreScreen() {
         }
         renderItem={({ item }) => (
           <View style={{ width: '100%', alignItems: 'center' }}>
-            <RewardCard reward={item} userPoints={userPoints} maxWidth={responsive.contentMaxWidth} />
+            <RewardCard
+              reward={item}
+              userPoints={userPoints}
+              maxWidth={responsive.contentMaxWidth}
+              onPress={() => { setRedeemed(false); setRedeemReward(item); }}
+            />
           </View>
         )}
       />
+
+      <Modal visible={!!redeemReward} transparent animationType="fade" onRequestClose={() => setRedeemReward(null)}>
+        <View style={styles.redeemOverlay}>
+          <View style={styles.redeemCard}>
+            <TouchableOpacity style={styles.redeemClose} onPress={() => setRedeemReward(null)}>
+              <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+
+            {redeemed ? (
+              <View style={styles.redeemSuccess}>
+                <View style={styles.redeemCheckCircle}>
+                  <Check color={Colors.white} size={32} strokeWidth={2.5} />
+                </View>
+                <Text style={styles.redeemSuccessTitle}>Resgatado!</Text>
+                <Text style={styles.redeemSuccessSub}>Mostre o QR code no balcão</Text>
+                {/* QR code mock */}
+                <View style={styles.qrBox}>
+                  {Array.from({ length: 5 }).map((_, row) => (
+                    <View key={row} style={styles.qrRow}>
+                      {Array.from({ length: 5 }).map((_, col) => (
+                        <View
+                          key={col}
+                          style={[
+                            styles.qrCell,
+                            ((row + col) % 2 === 0 || (row === 0 && col < 3) || (col === 0 && row < 3))
+                              && styles.qrCellFilled,
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.qrCode}>{redeemReward?.id.toUpperCase()}-{Date.now().toString().slice(-6)}</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.redeemTitle}>{redeemReward?.title}</Text>
+                <Text style={styles.redeemDesc}>{redeemReward?.description}</Text>
+                <Text style={styles.redeemPartner}>{redeemReward?.partnerName}</Text>
+                <View style={styles.redeemCostRow}>
+                  <Text style={styles.redeemCostLabel}>Custo</Text>
+                  <Text style={styles.redeemCostValue}>{redeemReward?.pointsCost} pts</Text>
+                </View>
+                <View style={styles.redeemCostRow}>
+                  <Text style={styles.redeemCostLabel}>Seu saldo</Text>
+                  <Text style={[styles.redeemCostValue, { color: userPoints >= (redeemReward?.pointsCost ?? 0) ? Colors.gold : Colors.urgent }]}>
+                    {userPoints} pts
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.redeemBtn, userPoints < (redeemReward?.pointsCost ?? 0) && { opacity: 0.4 }]}
+                  disabled={userPoints < (redeemReward?.pointsCost ?? 0)}
+                  activeOpacity={0.85}
+                  onPress={() => setRedeemed(true)}
+                >
+                  <Text style={styles.redeemBtnText}>Resgatar agora</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-function RewardCard({ reward, userPoints, maxWidth }: { reward: Reward; userPoints: number; maxWidth: number }) {
+function RewardCard({ reward, userPoints, maxWidth, onPress }: { reward: Reward; userPoints: number; maxWidth: number; onPress: () => void }) {
   const canRedeem = userPoints >= reward.pointsCost;
   const categoryIcon: Record<Reward['category'], LucideIcon> = {
     drink: Beer,
@@ -77,7 +146,7 @@ function RewardCard({ reward, userPoints, maxWidth }: { reward: Reward; userPoin
   const Icon = categoryIcon[reward.category];
 
   return (
-    <TouchableOpacity style={[styles.rewardCard, { maxWidth }, !canRedeem && styles.rewardDisabled]} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.rewardCard, { maxWidth }, !canRedeem && styles.rewardDisabled]} activeOpacity={0.85} onPress={onPress}>
       <View style={styles.rewardIcon}>
         <Icon color={canRedeem ? Colors.gold : Colors.textMuted} size={24} strokeWidth={2.2} />
       </View>
@@ -228,5 +297,133 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.gold,
     textAlign: 'center',
+  },
+  // Redeem modal
+  redeemOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing['2xl'],
+  },
+  redeemCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing['2xl'],
+    gap: Spacing.md,
+  },
+  redeemClose: {
+    alignSelf: 'flex-end',
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  redeemTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+  },
+  redeemDesc: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    lineHeight: FontSize.md * 1.5,
+  },
+  redeemPartner: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.secondary,
+  },
+  redeemCostRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  redeemCostLabel: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  redeemCostValue: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.lg,
+    color: Colors.gold,
+  },
+  redeemBtn: {
+    height: 50,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.sm,
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+  },
+  redeemBtnText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
+    color: Colors.white,
+  },
+  redeemSuccess: {
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+  },
+  redeemCheckCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+  },
+  redeemSuccessTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize['2xl'],
+    color: Colors.white,
+  },
+  redeemSuccessSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  qrBox: {
+    padding: Spacing.md,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
+    gap: 4,
+  },
+  qrRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  qrCell: {
+    width: 28,
+    height: 28,
+    borderRadius: 4,
+    backgroundColor: 'transparent',
+  },
+  qrCellFilled: {
+    backgroundColor: '#0A0A0F',
+  },
+  qrCode: {
+    fontFamily: FontFamily.mono,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    letterSpacing: 2,
   },
 });

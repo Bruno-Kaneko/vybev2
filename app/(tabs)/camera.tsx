@@ -1,16 +1,27 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal, FlatList } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Clock3, MapPin, Send, X, Camera } from 'lucide-react-native';
+import { Check, Clock3, MapPin, Send, X, Camera } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import type { TimerDuration } from '@/types';
 
 const TIMER_OPTIONS: TimerDuration[] = [2, 4, 6];
+
+const SP_LOCATIONS = [
+  { id: 'l1', name: 'Club Fama', address: 'Rua Augusta, 600' },
+  { id: 'l2', name: 'Bar do Victor', address: 'Av. Paulista, 1000' },
+  { id: 'l3', name: 'D-Edge', address: 'Av. Olga, 170' },
+  { id: 'l4', name: 'Outs Club', address: 'R. Barra Funda, 969' },
+  { id: 'l5', name: 'Cine Joia', address: 'Praça Carlos Gomes, 82' },
+  { id: 'l6', name: 'Blue Note SP', address: 'Av. Paulista, 2073' },
+  { id: 'l7', name: 'Bar Balcão', address: 'R. dos Pinheiros, 994' },
+  { id: 'l8', name: 'Frank Bar', address: 'R. José Maria Lisboa, 190' },
+];
 
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
@@ -19,6 +30,8 @@ export default function CameraScreen() {
   const [timer, setTimer] = useState<TimerDuration>(4);
   const [loading, setLoading] = useState(false);
   const [webWarning, setWebWarning] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(SP_LOCATIONS[0]);
 
   const openCamera = async () => {
     if (Platform.OS === 'web') {
@@ -124,15 +137,15 @@ export default function CameraScreen() {
               <MapPin color={Colors.secondary} size={20} strokeWidth={2.2} />
               <Text style={styles.sectionTitle}>Localizacao</Text>
             </View>
-            <View style={styles.locationCard}>
+            <TouchableOpacity style={styles.locationCard} onPress={() => setLocationOpen(true)} activeOpacity={0.85}>
               <View style={styles.locationIcon}>
                 <MapPin color={Colors.secondary} size={22} strokeWidth={2.2} />
               </View>
-              <View>
-                <Text style={styles.locationName}>Detectando localizacao...</Text>
-                <Text style={styles.locationSub}>Toque para alterar</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.locationName} numberOfLines={1}>{selectedLocation.name}</Text>
+                <Text style={styles.locationSub} numberOfLines={1}>{selectedLocation.address} · Toque para alterar</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.postSection}>
@@ -153,6 +166,43 @@ export default function CameraScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal visible={locationOpen} transparent animationType="slide" onRequestClose={() => setLocationOpen(false)}>
+        <View style={styles.locModalOverlay}>
+          <View style={[styles.locModalSheet, { paddingBottom: insets.bottom + Spacing.xl }]}>
+            <View style={styles.locModalHeader}>
+              <Text style={styles.locModalTitle}>Escolher localização</Text>
+              <TouchableOpacity onPress={() => setLocationOpen(false)} style={styles.locModalClose}>
+                <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={SP_LOCATIONS}
+              keyExtractor={item => item.id}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const active = item.id === selectedLocation.id;
+                return (
+                  <TouchableOpacity
+                    style={[styles.locRow, active && styles.locRowActive]}
+                    activeOpacity={0.8}
+                    onPress={() => { setSelectedLocation(item); setLocationOpen(false); }}
+                  >
+                    <View style={styles.locIconWrap}>
+                      <MapPin color={active ? Colors.secondary : Colors.textMuted} size={18} strokeWidth={2.2} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.locName, active && { color: Colors.white }]}>{item.name}</Text>
+                      <Text style={styles.locAddr} numberOfLines={1}>{item.address}</Text>
+                    </View>
+                    {active && <Check color={Colors.secondary} size={18} strokeWidth={2.4} />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -334,5 +384,69 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
     color: Colors.textMuted,
+  },
+  locModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  locModalSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    paddingTop: Spacing.md,
+    maxHeight: '70%',
+  },
+  locModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  locModalTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+  },
+  locModalClose: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  locRowActive: {
+    backgroundColor: 'rgba(255,45,120,0.06)',
+  },
+  locIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  locName: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+  },
+  locAddr: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textDisabled,
+    marginTop: 2,
   },
 });

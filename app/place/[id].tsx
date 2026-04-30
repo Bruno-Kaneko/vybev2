@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,13 +7,22 @@ import {
   CalendarDays,
   Camera,
   ChevronLeft,
+  Clock,
   Grid2X2,
   Heart,
   Info,
   MapPin,
+  Music,
   Navigation,
   Share2,
+  X,
 } from 'lucide-react-native';
+
+const MOCK_EVENTS = [
+  { id: 'e1', date: 'Sex, 02 Mai', time: '23:00', title: 'Open Format Night', dj: 'DJ Marquinhos', price: 'R$ 40' },
+  { id: 'e2', date: 'Sáb, 03 Mai', time: '22:00', title: 'Techno Session', dj: 'ANNA b Savage', price: 'R$ 80' },
+  { id: 'e3', date: 'Sex, 09 Mai', time: '23:00', title: 'House Lovers', dj: 'Djeff', price: 'R$ 50' },
+];
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
 import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -23,6 +32,8 @@ export default function PlaceProfileScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const [following, setFollowing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'posts' | 'info'>('posts');
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const place = MOCK_PLACES.find(item => item.id === id) ?? MOCK_PLACES[0];
   const placePosts = MOCK_POSTS.filter(post => post.placeId === place.id);
   const initials = useMemo(() => getInitials(place.name), [place.name]);
@@ -44,7 +55,11 @@ export default function PlaceProfileScreen() {
                   strokeWidth={2.2}
                 />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.circleButton} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.circleButton}
+                activeOpacity={0.8}
+                onPress={() => Share.share({ message: `${place.name} — ${place.address}. Veja no VYBE!` })}
+              >
                 <Share2 color={Colors.white} size={18} strokeWidth={2.2} />
               </TouchableOpacity>
             </View>
@@ -94,42 +109,88 @@ export default function PlaceProfileScreen() {
               >
                 <Text style={styles.followText}>{following ? 'Seguindo' : '+ Seguir'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.scheduleButton} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.scheduleButton} activeOpacity={0.85} onPress={() => setScheduleOpen(true)}>
                 <CalendarDays color={Colors.white} size={17} strokeWidth={2.2} />
                 <Text style={styles.scheduleText}>Agenda</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.tabsRow}>
-              <View style={styles.tabActive}>
-                <Grid2X2 color={Colors.white} size={20} strokeWidth={2.1} />
-              </View>
-              <View style={styles.tabInactive}>
-                <Info color={Colors.primaryShade} size={20} strokeWidth={2.1} />
-              </View>
+              <TouchableOpacity style={activeTab === 'posts' ? styles.tabActive : styles.tabInactive} onPress={() => setActiveTab('posts')} activeOpacity={0.8}>
+                <Grid2X2 color={activeTab === 'posts' ? Colors.white : Colors.primaryShade} size={20} strokeWidth={2.1} />
+              </TouchableOpacity>
+              <TouchableOpacity style={activeTab === 'info' ? styles.tabActive : styles.tabInactive} onPress={() => setActiveTab('info')} activeOpacity={0.8}>
+                <Info color={activeTab === 'info' ? Colors.white : Colors.primaryShade} size={20} strokeWidth={2.1} />
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.emptyArea}>
-              {placePosts.length ? (
-                <View style={styles.postSummary}>
-                  <Camera color={Colors.primaryShade} size={34} strokeWidth={1.9} />
-                  <Text style={styles.emptyTitle}>{placePosts.length} posts ativos</Text>
-                  <Text style={styles.emptyText}>Veja momentos recentes desse lugar no feed.</Text>
+            {activeTab === 'posts' ? (
+              <View style={styles.emptyArea}>
+                {placePosts.length ? (
+                  <View style={styles.postSummary}>
+                    <Camera color={Colors.primaryShade} size={34} strokeWidth={1.9} />
+                    <Text style={styles.emptyTitle}>{placePosts.length} posts ativos</Text>
+                    <Text style={styles.emptyText}>Veja momentos recentes desse lugar no feed.</Text>
+                  </View>
+                ) : (
+                  <>
+                    <Camera color={Colors.primaryShade} size={46} strokeWidth={1.8} />
+                    <Text style={styles.emptyTitle}>Nenhuma foto ainda</Text>
+                    <Text style={styles.emptyText}>Seja o primeiro a postar aqui.</Text>
+                  </>
+                )}
+              </View>
+            ) : (
+              <View style={styles.infoTab}>
+                {place.description ? (
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.infoLabel}>Sobre</Text>
+                    <Text style={styles.infoText}>{place.description}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoLabel}>Endereço</Text>
+                  <View style={styles.infoRow}>
+                    <MapPin color={Colors.secondary} size={15} strokeWidth={2.2} />
+                    <Text style={styles.infoText}>{place.address}</Text>
+                  </View>
                 </View>
-              ) : (
-                <>
-                  <Camera color={Colors.primaryShade} size={46} strokeWidth={1.8} />
-                  <Text style={styles.emptyTitle}>Nenhuma foto ainda</Text>
-                  <Text style={styles.emptyText}>Seja o primeiro a postar aqui.</Text>
-                </>
-              )}
-            </View>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoLabel}>Categoria</Text>
+                  <View style={styles.infoRow}>
+                    <Music color={Colors.secondary} size={15} strokeWidth={2.2} />
+                    <Text style={styles.infoText}>
+                      {place.category === 'club' ? 'Balada' : place.category === 'bar' ? 'Bar' : place.category === 'event' ? 'Evento' : 'Lounge'}
+                    </Text>
+                  </View>
+                </View>
+                {(place.tags ?? []).length > 0 && (
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.infoLabel}>Tags</Text>
+                    <View style={styles.tagsWrap}>
+                      {(place.tags ?? []).map(tag => (
+                        <View key={tag} style={styles.tagChip}>
+                          <Text style={styles.tagChipText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.sm }]}>
-        <TouchableOpacity style={styles.goButton} activeOpacity={0.86}>
+        <TouchableOpacity
+          style={styles.goButton}
+          activeOpacity={0.86}
+          onPress={() => {
+            const query = encodeURIComponent(place.address);
+            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+          }}
+        >
           <LinearGradient
             colors={Colors.gradientBrand}
             style={StyleSheet.absoluteFill}
@@ -140,6 +201,38 @@ export default function PlaceProfileScreen() {
           <Text style={styles.goText}>Ir pra la</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Agenda modal */}
+      <Modal visible={scheduleOpen} transparent animationType="slide" onRequestClose={() => setScheduleOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + Spacing.xl }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Agenda — {place.name}</Text>
+              <TouchableOpacity onPress={() => setScheduleOpen(false)} style={styles.modalClose}>
+                <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+            {MOCK_EVENTS.map(ev => (
+              <View key={ev.id} style={styles.eventRow}>
+                <View style={styles.eventDateBox}>
+                  <Text style={styles.eventDate}>{ev.date.split(',')[0]}</Text>
+                  <Text style={styles.eventDay}>{ev.date.split(', ')[1]}</Text>
+                </View>
+                <View style={styles.eventInfo}>
+                  <Text style={styles.eventTitle}>{ev.title}</Text>
+                  <View style={styles.eventMeta}>
+                    <Music color={Colors.textMuted} size={12} strokeWidth={2} />
+                    <Text style={styles.eventMetaText}>{ev.dj}</Text>
+                    <Clock color={Colors.textMuted} size={12} strokeWidth={2} />
+                    <Text style={styles.eventMetaText}>{ev.time}</Text>
+                  </View>
+                </View>
+                <Text style={styles.eventPrice}>{ev.price}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -368,5 +461,133 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodySemiBold,
     fontSize: FontSize.md,
     color: Colors.white,
+  },
+  // Info tab
+  infoTab: {
+    paddingTop: Spacing.lg,
+    gap: Spacing.xl,
+    paddingBottom: Spacing['2xl'],
+  },
+  infoBlock: {
+    gap: Spacing.xs,
+  },
+  infoLabel: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  infoText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.text,
+    lineHeight: FontSize.md * 1.5,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
+  tagChip: {
+    height: 28,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: 'rgba(123,47,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(123,47,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tagChipText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.secondary,
+  },
+  // Agenda modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    paddingTop: Spacing.md,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+  },
+  modalClose: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: Spacing.md,
+  },
+  eventDateBox: {
+    width: 48,
+    alignItems: 'center',
+    gap: 2,
+  },
+  eventDate: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.lg,
+    color: Colors.secondary,
+  },
+  eventDay: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
+  eventInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  eventTitle: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.white,
+  },
+  eventMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  eventMetaText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
+  eventPrice: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.sm,
+    color: Colors.gold,
   },
 });

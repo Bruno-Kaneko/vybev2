@@ -20,6 +20,7 @@ export default function ProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const [following, setFollowing] = useState(false);
   const user = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
   const userPosts = MOCK_POSTS.filter(p => p.userId === user.id);
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
@@ -59,7 +60,12 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.actionsRow}>
-          <VybeButton label="Seguir" onPress={() => {}} style={{ flex: 1 }} />
+          <VybeButton
+            label={following ? 'Seguindo ✓' : 'Seguir'}
+            onPress={() => setFollowing(prev => !prev)}
+            variant={following ? 'outline' : 'primary'}
+            style={{ flex: 1 }}
+          />
           <TouchableOpacity
             onPress={() => router.push(`/(tabs)/chat/${user.id}`)}
             style={styles.msgBtn}
