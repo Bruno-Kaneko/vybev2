@@ -1,31 +1,42 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, Clock3, MapPin, Send, X, Camera } from 'lucide-react-native';
+import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
+import { MOCK_PLACES } from '@/constants/MockData';
 import { VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import type { TimerDuration } from '@/types';
 
 const TIMER_OPTIONS: TimerDuration[] = [2, 4, 6];
+const MAX_POST_RADIUS_KM = 0.5;
 
-const SP_LOCATIONS = [
-  { id: 'l1', name: 'Club Fama', address: 'Rua Augusta, 600', neighborhood: 'Consolação' },
-  { id: 'l2', name: 'Bar do Victor', address: 'Av. Paulista, 1000', neighborhood: 'Paulista' },
-  { id: 'l3', name: 'D-Edge', address: 'Av. Olga, 170', neighborhood: 'Barra Funda' },
-  { id: 'l4', name: 'Outs Club', address: 'R. Barra Funda, 969', neighborhood: 'Barra Funda' },
-  { id: 'l5', name: 'Cine Joia', address: 'Praça Carlos Gomes, 82', neighborhood: 'Centro' },
-  { id: 'l6', name: 'Blue Note SP', address: 'Av. Paulista, 2073', neighborhood: 'Paulista' },
-  { id: 'l7', name: 'Bar Balcão', address: 'R. dos Pinheiros, 994', neighborhood: 'Pinheiros' },
-  { id: 'l8', name: 'Frank Bar', address: 'R. José Maria Lisboa, 190', neighborhood: 'Jardins' },
-  { id: 'l9', name: 'A Lôca', address: 'R. Fradique Coutinho, 1150', neighborhood: 'Pinheiros' },
-  { id: 'l10', name: 'Trackers', address: 'R. Cardeal Arcoverde, 2852', neighborhood: 'Pinheiros' },
-];
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-function LocationRow({ item, selected, onPress }: { item: typeof SP_LOCATIONS[0]; selected: boolean; onPress: () => void }) {
+type NearbyPlace = {
+  id: string;
+  name: string;
+  address: string;
+  neighborhood: string;
+  distanceM: number;
+};
+
+type LocationStatus = 'loading' | 'granted' | 'denied' | 'error';
+
+function LocationRow({ item, selected, onPress }: { item: NearbyPlace; selected: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[styles.locRow, selected && styles.locRowActive]} activeOpacity={0.8} onPress={onPress}>
       <View style={styles.locIconWrap}>
@@ -35,6 +46,7 @@ function LocationRow({ item, selected, onPress }: { item: typeof SP_LOCATIONS[0]
         <Text style={[styles.locName, selected && { color: Colors.white }]}>{item.name}</Text>
         <Text style={styles.locAddr} numberOfLines={1}>{item.address} · {item.neighborhood}</Text>
       </View>
+      <Text style={styles.locDistance}>{item.distanceM < 1000 ? `${item.distanceM}m` : `${(item.distanceM / 1000).toFixed(1)}km`}</Text>
       {selected && <Check color={Colors.secondary} size={18} strokeWidth={2.4} />}
     </TouchableOpacity>
   );
@@ -48,18 +60,59 @@ export default function CameraScreen() {
   const [loading, setLoading] = useState(false);
   const [webWarning, setWebWarning] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState(SP_LOCATIONS[0]);
-  const [mockNeighborhood] = useState('Pinheiros');
+
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>('loading');
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
+  const [neighborhood, setNeighborhood] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationStatus('denied');
+        return;
+      }
+
+      try {
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const { latitude, longitude } = pos.coords;
+
+        const nearby = MOCK_PLACES
+          .map(p => ({
+            id: p.id,
+            name: p.name,
+            address: p.address,
+            neighborhood: p.neighborhood ?? '',
+            distanceM: Math.round(haversineKm(latitude, longitude, p.location.latitude, p.location.longitude) * 1000),
+          }))
+          .filter(p => p.distanceM <= MAX_POST_RADIUS_KM * 1000)
+          .sort((a, b) => a.distanceM - b.distanceM);
+
+        setNearbyPlaces(nearby);
+        if (nearby.length > 0) setSelectedPlace(nearby[0]);
+
+        try {
+          const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
+          setNeighborhood(geo?.district ?? geo?.subregion ?? geo?.city ?? null);
+        } catch {
+          setNeighborhood(nearby[0]?.neighborhood ?? null);
+        }
+
+        setLocationStatus('granted');
+      } catch {
+        setLocationStatus('error');
+      }
+    })();
+  }, []);
 
   const openCamera = async () => {
     if (Platform.OS === 'web') {
       setWebWarning(true);
       return;
     }
-
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') return;
-
     const result = await ImagePicker.launchCameraAsync({
       quality: 0.85,
       allowsEditing: true,
@@ -69,11 +122,22 @@ export default function CameraScreen() {
   };
 
   const handlePost = async () => {
-    if (!image) return;
+    if (!image || !selectedPlace) return;
     setLoading(true);
     await new Promise(r => setTimeout(r, 1000));
     setLoading(false);
     router.replace('/(tabs)');
+  };
+
+  const canPost = !!image && locationStatus === 'granted' && !!selectedPlace;
+
+  const postButtonLabel = () => {
+    if (!image) return 'Tire uma foto primeiro';
+    if (locationStatus === 'loading') return 'Verificando localização...';
+    if (locationStatus === 'denied') return 'Localização necessária para postar';
+    if (locationStatus === 'error') return 'Erro ao obter localização';
+    if (!selectedPlace) return 'Você não está próximo de nenhum lugar';
+    return 'Publicar agora';
   };
 
   return (
@@ -81,10 +145,7 @@ export default function CameraScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingHorizontal: responsive.pagePadding,
-            paddingBottom: insets.bottom + 110,
-          },
+          { paddingHorizontal: responsive.pagePadding, paddingBottom: insets.bottom + 110 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -141,9 +202,7 @@ export default function CameraScreen() {
                       end={{ x: 1, y: 0 }}
                     />
                   ) : null}
-                  <Text style={[styles.timerText, timer === t && { color: Colors.white }]}>
-                    {t}h
-                  </Text>
+                  <Text style={[styles.timerText, timer === t && { color: Colors.white }]}>{t}h</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -153,34 +212,72 @@ export default function CameraScreen() {
           <View style={styles.section}>
             <View style={styles.sectionTitleRow}>
               <MapPin color={Colors.secondary} size={20} strokeWidth={2.2} />
-              <Text style={styles.sectionTitle}>Localizacao</Text>
+              <Text style={styles.sectionTitle}>Localização</Text>
             </View>
-            <TouchableOpacity style={styles.locationCard} onPress={() => setLocationOpen(true)} activeOpacity={0.85}>
-              <View style={styles.locationIcon}>
-                <MapPin color={Colors.secondary} size={22} strokeWidth={2.2} />
+
+            {locationStatus === 'loading' ? (
+              <View style={styles.locationCard}>
+                <ActivityIndicator size="small" color={Colors.secondary} />
+                <Text style={styles.locationSub}>Detectando sua localização...</Text>
               </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.locationName} numberOfLines={1}>{selectedLocation.name}</Text>
-                <Text style={styles.locationSub} numberOfLines={1}>{selectedLocation.address} · Toque para alterar</Text>
+            ) : locationStatus === 'denied' ? (
+              <View style={[styles.locationCard, styles.locationCardError]}>
+                <AlertCircle color={Colors.urgent} size={22} strokeWidth={2.2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.locationName, { color: Colors.urgent }]}>Localização necessária</Text>
+                  <Text style={styles.locationSub}>Permita o acesso à localização nas configurações</Text>
+                </View>
               </View>
-            </TouchableOpacity>
+            ) : locationStatus === 'error' ? (
+              <View style={[styles.locationCard, styles.locationCardError]}>
+                <AlertCircle color={Colors.urgent} size={22} strokeWidth={2.2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.locationName, { color: Colors.urgent }]}>Erro ao obter localização</Text>
+                  <Text style={styles.locationSub}>Verifique o GPS e tente novamente</Text>
+                </View>
+              </View>
+            ) : !selectedPlace ? (
+              <View style={[styles.locationCard, styles.locationCardWarn]}>
+                <MapPin color={Colors.textMuted} size={22} strokeWidth={2.2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.locationName}>Nenhum lugar próximo</Text>
+                  <Text style={styles.locationSub}>Você precisa estar a menos de 500m de um lugar cadastrado para postar</Text>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.locationCard}
+                onPress={() => nearbyPlaces.length > 1 && setLocationOpen(true)}
+                activeOpacity={nearbyPlaces.length > 1 ? 0.85 : 1}
+              >
+                <View style={styles.locationIcon}>
+                  <MapPin color={Colors.secondary} size={22} strokeWidth={2.2} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.locationName} numberOfLines={1}>{selectedPlace.name}</Text>
+                  <Text style={styles.locationSub} numberOfLines={1}>
+                    {selectedPlace.distanceM}m de você{nearbyPlaces.length > 1 ? ' · Toque para alterar' : ''}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.postSection}>
             <VybeButton
-              label={image ? 'Publicar agora' : 'Tire uma foto primeiro'}
+              label={postButtonLabel()}
               onPress={handlePost}
               loading={loading}
-              disabled={!image}
+              disabled={!canPost}
               fullWidth
               size="lg"
             />
-            {image ? (
+            {canPost && (
               <View style={styles.readyRow}>
                 <Send color={Colors.secondary} size={16} strokeWidth={2.2} />
                 <Text style={styles.readyText}>Tudo pronto para publicar</Text>
               </View>
-            ) : null}
+            )}
           </View>
         </View>
       </ScrollView>
@@ -195,16 +292,19 @@ export default function CameraScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.regionBadge}>
-                <Text style={styles.regionText}>📍 Você está em: {mockNeighborhood}</Text>
-              </View>
-              <Text style={styles.locSectionHeader}>Próximos de você</Text>
-              {SP_LOCATIONS.filter(l => l.neighborhood === mockNeighborhood).map(item => (
-                <LocationRow key={item.id} item={item} selected={item.id === selectedLocation.id} onPress={() => { setSelectedLocation(item); setLocationOpen(false); }} />
-              ))}
-              <Text style={styles.locSectionHeader}>Outros bairros</Text>
-              {SP_LOCATIONS.filter(l => l.neighborhood !== mockNeighborhood).map(item => (
-                <LocationRow key={item.id} item={item} selected={item.id === selectedLocation.id} onPress={() => { setSelectedLocation(item); setLocationOpen(false); }} />
+              {neighborhood && (
+                <View style={styles.regionBadge}>
+                  <Text style={styles.regionText}>📍 Você está em: {neighborhood}</Text>
+                </View>
+              )}
+              <Text style={styles.locSectionHeader}>Próximos de você (menos de 500m)</Text>
+              {nearbyPlaces.map(item => (
+                <LocationRow
+                  key={item.id}
+                  item={item}
+                  selected={item.id === selectedPlace?.id}
+                  onPress={() => { setSelectedPlace(item); setLocationOpen(false); }}
+                />
               ))}
             </ScrollView>
           </View>
@@ -359,6 +459,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     padding: Spacing.md,
   },
+  locationCardError: {
+    borderColor: 'rgba(255,59,48,0.3)',
+    backgroundColor: 'rgba(255,59,48,0.06)',
+  },
+  locationCardWarn: {
+    borderColor: Colors.border,
+    opacity: 0.7,
+  },
   locationIcon: {
     width: 38,
     height: 38,
@@ -455,6 +563,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textDisabled,
     marginTop: 2,
+  },
+  locDistance: {
+    fontFamily: FontFamily.mono,
+    fontSize: FontSize.xs,
+    color: Colors.textDisabled,
+    flexShrink: 0,
   },
   regionBadge: {
     margin: Spacing.lg,

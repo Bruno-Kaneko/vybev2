@@ -213,9 +213,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  listContent: {},
+  listContent: {
+    width: '100%',
+  },
   shell: {
     width: '100%',
+    alignSelf: 'center',
   },
   title: {
     fontFamily: FontFamily.heading,

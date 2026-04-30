@@ -25,7 +25,34 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import * as Location from 'expo-location';
 import type { Post, Chat } from '@/types';
+
+const MAX_JOIN_RADIUS_KM = 0.5;
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function isVenueOpen(openHour: number, closeHour: number): boolean {
+  const h = new Date().getHours();
+  if (closeHour <= openHour) return h >= openHour || h < closeHour;
+  return h >= openHour && h < closeHour;
+}
+
+function getClosesAtTs(closeHour: number): number {
+  const closes = new Date();
+  closes.setHours(closeHour, 0, 0, 0);
+  if (closes.getTime() <= Date.now()) closes.setDate(closes.getDate() + 1);
+  return closes.getTime();
+}
 
 export default function HomeScreen() {
   const responsive = useResponsive();
@@ -33,11 +60,21 @@ export default function HomeScreen() {
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [grupoesOpen, setGrupoesOpen] = useState(false);
-  const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string } | null>(null);
+  const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string; closesAtTs: number } | null>(null);
   const [groupChatOpen, setGroupChatOpen] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [activePosts, setActivePosts] = useState<Post[]>(() =>
+    MOCK_POSTS.filter(p => p.expiresAt > Date.now())
+  );
 
-  const handleJoin = (g: { id: string; name: string }) => {
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActivePosts(MOCK_POSTS.filter(p => p.expiresAt > Date.now()));
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleJoin = (g: { id: string; name: string; closesAtTs: number }) => {
     setJoinedGroup(g);
   };
 
@@ -50,7 +87,7 @@ export default function HomeScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <FlatList
-        data={MOCK_POSTS}
+        data={activePosts}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
@@ -398,11 +435,22 @@ function NotificationsDrawer({
   );
 }
 
-const MOCK_GRUPOS = [
-  { id: 'g1', name: 'Club Fama Tonight 🔥', members: 312, lastMsg: 'Quem ta chegando agora?', unread: 8 },
-  { id: 'g2', name: 'Bar do Victor — Rolê', members: 87, lastMsg: 'Open bar até meia-noite!', unread: 3 },
-  { id: 'g3', name: 'D-Edge rave crew', members: 540, lastMsg: 'Lineup confirmado 🎧', unread: 0 },
-  { id: 'g4', name: 'Balada SP — Geral', members: 1240, lastMsg: 'Alguém no Outs?', unread: 21 },
+type GrupoItem = {
+  id: string;
+  name: string;
+  members: number;
+  lastMsg: string;
+  unread: number;
+  location: { latitude: number; longitude: number };
+  openHour: number;
+  closeHour: number;
+};
+
+const MOCK_GRUPOS: GrupoItem[] = [
+  { id: 'g1', name: 'Club Fama Tonight 🔥', members: 312, lastMsg: 'Quem ta chegando agora?', unread: 8, location: { latitude: -23.561, longitude: -46.656 }, openHour: 22, closeHour: 5 },
+  { id: 'g2', name: 'Bar do Victor — Rolê', members: 87, lastMsg: 'Open bar até meia-noite!', unread: 3, location: { latitude: -23.558, longitude: -46.660 }, openHour: 17, closeHour: 0 },
+  { id: 'g3', name: 'D-Edge rave crew', members: 540, lastMsg: 'Lineup confirmado 🎧', unread: 0, location: { latitude: -23.545, longitude: -46.643 }, openHour: 23, closeHour: 6 },
+  { id: 'g4', name: 'Balada SP — Geral', members: 1240, lastMsg: 'Alguém no Outs?', unread: 21, location: { latitude: -23.572, longitude: -46.648 }, openHour: 21, closeHour: 4 },
 ];
 
 type DialogConfig = {
@@ -425,9 +473,9 @@ function GrupoesDrawer({
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
-  joinedGroup: { id: string; name: string } | null;
+  joinedGroup: { id: string; name: string; closesAtTs: number } | null;
   cooldownUntil: number | null;
-  onJoin: (g: { id: string; name: string }) => void;
+  onJoin: (g: { id: string; name: string; closesAtTs: number }) => void;
   onOpenChat: () => void;
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
@@ -436,14 +484,36 @@ function GrupoesDrawer({
   const currentH = useRef(SNAP_HALF);
   const slideAnim = useRef(new Animated.Value(400)).current;
   const [dialog, setDialog] = useState<DialogConfig | null>(null);
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationDenied, setLocationDenied] = useState(false);
+
+  const nearbyGrupos = userCoords
+    ? MOCK_GRUPOS.filter(g => haversineKm(userCoords.latitude, userCoords.longitude, g.location.latitude, g.location.longitude) <= MAX_JOIN_RADIUS_KM)
+    : [];
 
   useEffect(() => {
-    if (visible) {
-      heightAnim.setValue(SNAP_HALF);
-      currentH.current = SNAP_HALF;
-      slideAnim.setValue(400);
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 } as any).start();
-    }
+    if (!visible) return;
+    heightAnim.setValue(SNAP_HALF);
+    currentH.current = SNAP_HALF;
+    slideAnim.setValue(400);
+    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 } as any).start();
+
+    setLocationLoading(true);
+    setLocationDenied(false);
+    Location.requestForegroundPermissionsAsync().then(({ status }) => {
+      if (status !== 'granted') {
+        setLocationDenied(true);
+        setLocationLoading(false);
+        return;
+      }
+      return Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    }).then(pos => {
+      if (pos) setUserCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      setLocationLoading(false);
+    }).catch(() => {
+      setLocationLoading(false);
+    });
   }, [visible]);
 
   const panResponder = useRef(
@@ -483,15 +553,42 @@ function GrupoesDrawer({
             </TouchableOpacity>
           </View>
           <FlatList
-            data={MOCK_GRUPOS}
+            data={nearbyGrupos}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              locationLoading ? (
+                <View style={styles.drawerEmpty}>
+                  <Text style={styles.drawerEmptyText}>Buscando grupões perto de você...</Text>
+                </View>
+              ) : locationDenied ? (
+                <View style={styles.drawerEmpty}>
+                  <MapPin color={Colors.textMuted} size={36} strokeWidth={1.8} />
+                  <Text style={styles.drawerEmptyText}>Permita o acesso à localização para ver os grupões próximos</Text>
+                </View>
+              ) : (
+                <View style={styles.drawerEmpty}>
+                  <Users color={Colors.textMuted} size={36} strokeWidth={1.8} />
+                  <Text style={styles.drawerEmptyText}>Nenhum grupão a menos de 500m de você</Text>
+                </View>
+              )
+            }
             renderItem={({ item }) => {
               const isJoined = joinedGroup?.id === item.id;
+              const open = isVenueOpen(item.openHour, item.closeHour);
 
               const handlePress = () => {
                 if (isJoined) {
                   onOpenChat();
+                  return;
+                }
+
+                if (!open) {
+                  setDialog({
+                    title: 'Grupão fechado',
+                    message: `Este grupão só fica ativo a partir das ${item.openHour}h. Volte quando o lugar abrir!`,
+                    confirmLabel: 'Entendi',
+                  });
                   return;
                 }
 
@@ -522,27 +619,37 @@ function GrupoesDrawer({
                   message: `Deseja entrar em "${item.name}"?`,
                   confirmLabel: 'Entrar',
                   cancelLabel: 'Cancelar',
-                  onConfirm: () => onJoin({ id: item.id, name: item.name }),
+                  onConfirm: () => onJoin({ id: item.id, name: item.name, closesAtTs: getClosesAtTs(item.closeHour) }),
                 });
               };
 
               return (
-                <TouchableOpacity style={[styles.drawerRow, isJoined && styles.drawerRowJoined]} activeOpacity={0.8} onPress={handlePress}>
-                  <View style={[styles.groupAvatar, isJoined && { borderColor: Colors.secondary, borderWidth: 2 }]}>
-                    <Users color={isJoined ? Colors.secondary : Colors.textMuted} size={22} strokeWidth={2} />
+                <TouchableOpacity
+                  style={[styles.drawerRow, isJoined && styles.drawerRowJoined, !open && styles.drawerRowClosed]}
+                  activeOpacity={0.8}
+                  onPress={handlePress}
+                >
+                  <View style={[styles.groupAvatar, isJoined && { borderColor: Colors.secondary, borderWidth: 2 }, !open && { borderColor: Colors.border }]}>
+                    <Users color={isJoined ? Colors.secondary : open ? Colors.textMuted : Colors.textDisabled} size={22} strokeWidth={2} />
                   </View>
                   <View style={styles.drawerRowInfo}>
                     <View style={styles.drawerRowTop}>
-                      <Text style={[styles.drawerRowName, (item.unread > 0 || isJoined) && { color: Colors.white }]} numberOfLines={1}>
+                      <Text style={[styles.drawerRowName, (item.unread > 0 || isJoined) && open && { color: Colors.white }, !open && { color: Colors.textDisabled }]} numberOfLines={1}>
                         {item.name}
                       </Text>
-                      <Text style={styles.drawerRowTime}>{item.members} membros</Text>
+                      {open ? (
+                        <Text style={styles.drawerRowTime}>{item.members} membros</Text>
+                      ) : (
+                        <View style={styles.closedBadge}>
+                          <Text style={styles.closedBadgeText}>Fechado</Text>
+                        </View>
+                      )}
                     </View>
-                    <Text style={[styles.drawerRowPreview, item.unread > 0 && { color: Colors.text }]} numberOfLines={1}>
-                      {isJoined ? '✓ Você está neste grupão' : item.lastMsg}
+                    <Text style={[styles.drawerRowPreview, item.unread > 0 && open && { color: Colors.text }]} numberOfLines={1}>
+                      {isJoined ? '✓ Você está neste grupão' : open ? item.lastMsg : `Abre às ${item.openHour}h`}
                     </Text>
                   </View>
-                  {item.unread > 0 && !isJoined && (
+                  {item.unread > 0 && !isJoined && open && (
                     <View style={styles.unreadBadge}>
                       <Text style={styles.unreadText}>{item.unread}</Text>
                     </View>
@@ -612,7 +719,7 @@ function GroupChatModal({
   onLeave,
 }: {
   visible: boolean;
-  group: { id: string; name: string };
+  group: { id: string; name: string; closesAtTs: number };
   insets: { bottom: number; top: number };
   onClose: () => void;
   onLeave: () => void;
@@ -620,6 +727,24 @@ function GroupChatModal({
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<GroupMessage[]>(MOCK_GROUP_MESSAGES);
   const [leaveDialog, setLeaveDialog] = useState(false);
+  const [encerrado, setEncerrado] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (Date.now() >= group.closesAtTs) {
+      setEncerrado(true);
+      setMessages([]);
+      return;
+    }
+    const interval = setInterval(() => {
+      if (Date.now() >= group.closesAtTs) {
+        setEncerrado(true);
+        setMessages([]);
+        clearInterval(interval);
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [visible, group.closesAtTs]);
 
   const send = () => {
     if (!text.trim()) return;
@@ -634,58 +759,72 @@ function GroupChatModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={[styles.gcRoot, { paddingTop: insets.top }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        <View style={styles.gcHeader}>
-          <View style={styles.gcHeaderLeft}>
-            <Text style={styles.gcSuperLabel}>Grupões</Text>
-            <Text style={styles.gcGroupName} numberOfLines={1}>{group.name}</Text>
+    <>
+      <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
+        <KeyboardAvoidingView
+          style={[styles.gcRoot, { paddingTop: insets.top }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <View style={styles.gcHeader}>
+            <View style={styles.gcHeaderLeft}>
+              <Text style={styles.gcSuperLabel}>Grupões</Text>
+              <Text style={styles.gcGroupName} numberOfLines={1}>{group.name}</Text>
+            </View>
+            <View style={styles.gcHeaderRight}>
+              <TouchableOpacity onPress={() => setLeaveDialog(true)} style={styles.gcLeaveBtn} activeOpacity={0.8}>
+                <LogOut color={Colors.secondary} size={16} strokeWidth={2.2} />
+                <Text style={styles.gcLeaveText}>Sair</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onClose} style={styles.gcCloseBtn} activeOpacity={0.8}>
+                <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.gcHeaderRight}>
-            <TouchableOpacity onPress={() => setLeaveDialog(true)} style={styles.gcLeaveBtn} activeOpacity={0.8}>
-              <LogOut color={Colors.secondary} size={16} strokeWidth={2.2} />
-              <Text style={styles.gcLeaveText}>Sair</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onClose} style={styles.gcCloseBtn} activeOpacity={0.8}>
-              <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        <FlatList
-          data={messages}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.gcMessagesList}
-          renderItem={({ item }) => <GroupMessageBubble msg={item} />}
-        />
-
-        <View style={[styles.gcInputRow, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.gcInputShell}>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Mensagem..."
-              placeholderTextColor={Colors.textDisabled}
-              style={[styles.gcInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
-              returnKeyType="send"
-              onSubmitEditing={send}
+          {encerrado ? (
+            <View style={styles.gcEncerrado}>
+              <Timer color={Colors.textMuted} size={40} strokeWidth={1.8} />
+              <Text style={styles.gcEncerradoTitle}>Grupão encerrado</Text>
+              <Text style={styles.gcEncerradoSub}>O lugar fechou e as mensagens foram apagadas automaticamente.</Text>
+              <TouchableOpacity style={styles.gcEncerradoBtn} onPress={onLeave} activeOpacity={0.85}>
+                <Text style={styles.gcEncerradoBtnText}>Sair</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={messages}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.gcMessagesList}
+              renderItem={({ item }) => <GroupMessageBubble msg={item} />}
             />
-            <TouchableOpacity
-              onPress={send}
-              style={[styles.gcSendBtn, !text.trim() && styles.gcSendBtnDisabled]}
-              disabled={!text.trim()}
-            >
-              <ArrowUp color={Colors.white} size={18} strokeWidth={2.5} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+          )}
 
-      {/* Leave confirmation dialog */}
+          {!encerrado && (
+            <View style={[styles.gcInputRow, { paddingBottom: insets.bottom + 16 }]}>
+              <View style={styles.gcInputShell}>
+                <TextInput
+                  value={text}
+                  onChangeText={setText}
+                  placeholder="Mensagem..."
+                  placeholderTextColor={Colors.textDisabled}
+                  style={[styles.gcInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
+                  returnKeyType="send"
+                  onSubmitEditing={send}
+                />
+                <TouchableOpacity
+                  onPress={send}
+                  style={[styles.gcSendBtn, !text.trim() && styles.gcSendBtnDisabled]}
+                  disabled={!text.trim()}
+                >
+                  <ArrowUp color={Colors.white} size={18} strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal visible={leaveDialog} transparent animationType="fade" onRequestClose={() => setLeaveDialog(false)}>
         <View style={styles.dialogOverlay}>
           <View style={styles.dialogCard}>
@@ -715,7 +854,7 @@ function GroupChatModal({
           </View>
         </View>
       </Modal>
-    </Modal>
+    </>
   );
 }
 
@@ -1135,6 +1274,58 @@ const styles = StyleSheet.create({
   notifEmptyText: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  drawerRowClosed: {
+    opacity: 0.55,
+  },
+  closedBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  closedBadgeText: {
+    fontFamily: FontFamily.mono,
+    fontSize: 10,
+    color: Colors.textDisabled,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  gcEncerrado: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing['3xl'],
+    gap: Spacing.md,
+  },
+  gcEncerradoTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+    textAlign: 'center',
+  },
+  gcEncerradoSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: FontSize.md * 1.55,
+  },
+  gcEncerradoBtn: {
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing['2xl'],
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  gcEncerradoBtnText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
     color: Colors.textMuted,
   },
   groupAvatar: {

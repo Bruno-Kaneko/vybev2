@@ -18,6 +18,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="store" options={{ title: 'Loja' }} />
       <Tabs.Screen name="profile" options={{ title: 'Perfil' }} />
       <Tabs.Screen name="chat/[id]" options={{ href: null }} />
+      <Tabs.Screen name="grupao/index" options={{ href: null }} />
+      <Tabs.Screen name="grupao/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -24,6 +24,14 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { signOut } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import type { RelationshipStatus } from '@/types';
+
+const STATUS_OPTIONS: { value: RelationshipStatus; label: string; color: string; bg: string }[] = [
+  { value: 'solteiro',  label: 'Solteiro(a)', color: '#22C55E', bg: 'rgba(34,197,94,0.12)' },
+  { value: 'namorando', label: 'Namorando',   color: '#EF4444', bg: 'rgba(239,68,68,0.12)' },
+  { value: 'ficando',   label: 'Ficando',     color: '#A855F7', bg: 'rgba(168,85,247,0.12)' },
+  { value: 'curtindo',  label: 'Só curtindo', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)' },
+];
 
 export default function MyProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -38,6 +46,8 @@ export default function MyProfileScreen() {
   const [editLoading, setEditLoading] = useState(false);
   const [localUsername, setLocalUsername] = useState<string | null>(null);
   const [localBio, setLocalBio] = useState<string | null>(null);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [localStatus, setLocalStatus] = useState<RelationshipStatus | null>(null);
 
   const thumbGap = Spacing.xs;
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
@@ -176,6 +186,23 @@ export default function MyProfileScreen() {
           </TouchableOpacity>
           <Text style={styles.displayName}>{displayName}</Text>
           <Text style={styles.username}>@{username}</Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setStatusOpen(true)}
+            style={[
+              styles.statusBadge,
+              localStatus
+                ? { backgroundColor: STATUS_OPTIONS.find(o => o.value === localStatus)!.bg, borderColor: STATUS_OPTIONS.find(o => o.value === localStatus)!.color + '44' }
+                : { backgroundColor: Colors.surface, borderColor: Colors.border },
+            ]}
+          >
+            <Text style={[
+              styles.statusBadgeText,
+              localStatus ? { color: STATUS_OPTIONS.find(o => o.value === localStatus)!.color } : { color: Colors.textMuted },
+            ]}>
+              {localStatus ? STATUS_OPTIONS.find(o => o.value === localStatus)!.label : '+ Status de relacionamento'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.statsRow}>
@@ -231,6 +258,38 @@ export default function MyProfileScreen() {
               </View>
             </View>
           </KeyboardAvoidingView>
+        </Modal>
+
+        <Modal visible={statusOpen} transparent animationType="slide" onRequestClose={() => setStatusOpen(false)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setStatusOpen(false)}>
+            <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+              <Text style={styles.modalTitle}>Status de relacionamento</Text>
+              {STATUS_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.statusOption,
+                    localStatus === opt.value && { backgroundColor: opt.bg, borderColor: opt.color + '55' },
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() => { setLocalStatus(opt.value); setStatusOpen(false); }}
+                >
+                  <View style={[styles.statusDot, { backgroundColor: opt.color }]} />
+                  <Text style={[styles.statusOptionText, localStatus === opt.value && { color: opt.color }]}>
+                    {opt.label}
+                  </Text>
+                  {localStatus === opt.value && (
+                    <Text style={[styles.statusCheck, { color: opt.color }]}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+              {localStatus && (
+                <TouchableOpacity style={styles.clearStatus} onPress={() => { setLocalStatus(null); setStatusOpen(false); }}>
+                  <Text style={styles.clearStatusText}>Remover status</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </TouchableOpacity>
         </Modal>
 
         {message ? <Text style={styles.feedback}>{message}</Text> : null}
@@ -359,6 +418,18 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textMuted,
+  },
+  statusBadge: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    marginTop: Spacing.xs,
+  },
+  statusBadgeText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    letterSpacing: 0.3,
   },
   statsRow: {
     flexDirection: 'row',
@@ -560,5 +631,42 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     flex: 2,
+  },
+  statusOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceElevated,
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  statusOptionText: {
+    flex: 1,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.text,
+  },
+  statusCheck: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
+  },
+  clearStatus: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  clearStatusText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textDecorationLine: 'underline',
   },
 });

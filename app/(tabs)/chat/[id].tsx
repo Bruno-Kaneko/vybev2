@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,17 +11,30 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, ChevronLeft, Timer } from 'lucide-react-native';
+import { ArrowUp, ChevronLeft, LockKeyhole, Timer } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_USERS } from '@/constants/MockData';
+import { MOCK_USERS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+
+const CHAT_LIFETIME_MS = 8 * 3600 * 1000;
 
 const MOCK_MESSAGES = [
   { id: 'm1', senderId: '1', text: 'Vc ainda ta aqui?', createdAt: Date.now() - 5 * 60000 },
   { id: 'm2', senderId: 'me', text: 'Sim! To no bar do fundo', createdAt: Date.now() - 4 * 60000 },
   { id: 'm3', senderId: '1', text: 'Que otimo! Vem aqui', createdAt: Date.now() - 2 * 60000 },
 ];
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return '0s';
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,14 +43,53 @@ export default function ChatScreen() {
   const chatWidth = responsive.isDesktop ? 720 : responsive.contentMaxWidth;
   const [text, setText] = useState('');
   const [messages, setMessages] = useState(MOCK_MESSAGES);
+  const [remaining, setRemaining] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const user = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
+  const chat = MOCK_CHATS.find(c => c.participants.some(p => p.id === id));
+  const expiresAt = chat ? chat.createdAt + CHAT_LIFETIME_MS : Date.now() + CHAT_LIFETIME_MS;
+
+  useEffect(() => {
+    const tick = () => setRemaining(Math.max(0, expiresAt - Date.now()));
+    tick();
+    intervalRef.current = setInterval(tick, 1000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [expiresAt]);
+
+  const isExpired = remaining <= 0;
+  const isUrgent = remaining < 30 * 60 * 1000;
 
   const send = () => {
-    if (!text.trim()) return;
+    if (!text.trim() || isExpired) return;
     setMessages(prev => [...prev, { id: `m${Date.now()}`, senderId: 'me', text: text.trim(), createdAt: Date.now() }]);
     setText('');
   };
+
+  if (isExpired) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top }]}>
+        <View style={[styles.shell, { maxWidth: chatWidth }]}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
+              <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
+            </TouchableOpacity>
+            <Avatar uri={user.avatar} size="sm" />
+            <View style={styles.headerCopy}>
+              <Text style={styles.headerName}>{user.displayName}</Text>
+            </View>
+          </View>
+          <View style={styles.encerrado}>
+            <LockKeyhole color={Colors.textMuted} size={44} strokeWidth={1.5} />
+            <Text style={styles.encerradoTitle}>Conversa encerrada</Text>
+            <Text style={styles.encerradoSub}>
+              Esta conversa expirou após 8h.{'\n'}Mande uma nova mensagem para reconectar.
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -55,9 +107,11 @@ export default function ChatScreen() {
             <Text style={styles.headerName}>{user.displayName}</Text>
             <Text style={styles.headerSub}>Ativo agora</Text>
           </View>
-          <View style={styles.expiryBadge}>
-            <Timer color={Colors.secondary} size={12} strokeWidth={2.2} />
-            <Text style={styles.expiryText}>6h</Text>
+          <View style={[styles.expiryBadge, isUrgent && styles.expiryBadgeUrgent]}>
+            <Timer color={isUrgent ? Colors.secondary : Colors.secondary} size={12} strokeWidth={2.2} />
+            <Text style={[styles.expiryText, isUrgent && styles.expiryTextUrgent]}>
+              {formatCountdown(remaining)}
+            </Text>
           </View>
         </View>
 
@@ -136,9 +190,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,45,120,0.25)',
   },
+  expiryBadgeUrgent: {
+    backgroundColor: 'rgba(255,45,120,0.22)',
+    borderColor: Colors.secondary,
+  },
   expiryText: {
     fontFamily: FontFamily.mono,
     fontSize: 11,
+    color: Colors.secondary,
+  },
+  expiryTextUrgent: {
     color: Colors.secondary,
   },
   headerCopy: {
@@ -226,5 +287,25 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: {
     opacity: 0.4,
+  },
+  encerrado: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing['2xl'],
+  },
+  encerradoTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+    marginTop: Spacing.sm,
+  },
+  encerradoSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: FontSize.md * 1.6,
   },
 });

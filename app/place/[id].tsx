@@ -15,12 +15,14 @@ import {
   MapPin,
   Music,
   Navigation,
+  Radio,
   Share2,
   X,
 } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
 import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
+import type { CrowdLevel, QueueLevel, VibeType } from '@/types';
 
 const PLACE_EXTRAS: Record<string, { parking?: { name: string; address: string }; metro?: { name: string; distanceM: number } }> = {
   place1:  { parking: { name: 'Estacionamento Augusta',    address: 'R. Bela Cintra, 210 — Consolação' },      metro: { name: 'Consolação',            distanceM: 320 } },
@@ -56,10 +58,13 @@ export default function PlaceProfileScreen() {
   const [following, setFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'info'>('posts');
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [metroPopup, setMetroPopup] = useState(false);
   const [parkingPopup, setParkingPopup] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState<'address' | 'parking' | null>(null);
+  const [reportedAt, setReportedAt] = useState<number | null>(null);
   const slideAnim = useRef(new Animated.Value(400)).current;
+  const reportSlideAnim = useRef(new Animated.Value(500)).current;
 
   const showCopied = (type: 'address' | 'parking') => {
     setCopiedMsg(type);
@@ -73,10 +78,36 @@ export default function PlaceProfileScreen() {
     }
   }, [scheduleOpen]);
 
+  useEffect(() => {
+    if (reportOpen) {
+      setDraftCrowd(liveCrowd);
+      setDraftQueue(liveQueue);
+      setDraftVibe(liveVibe);
+      reportSlideAnim.setValue(500);
+      Animated.spring(reportSlideAnim, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 } as any).start();
+    }
+  }, [reportOpen]);
+
+  const submitReport = () => {
+    setLiveCrowd(draftCrowd);
+    setLiveQueue(draftQueue);
+    setLiveVibe(draftVibe);
+    setReportedAt(Date.now());
+    setReportOpen(false);
+  };
+
   const place = MOCK_PLACES.find(item => item.id === id) ?? MOCK_PLACES[0];
   const extras = PLACE_EXTRAS[place.id] ?? {};
   const placePosts = MOCK_POSTS.filter(post => post.placeId === place.id);
   const initials = useMemo(() => getInitials(place.name), [place.name]);
+
+  const [liveCrowd, setLiveCrowd] = useState<CrowdLevel | undefined>(place.crowdLevel);
+  const [liveQueue, setLiveQueue] = useState<QueueLevel | undefined>(place.queueLevel);
+  const [liveVibe, setLiveVibe] = useState<VibeType | undefined>(place.vibe);
+
+  const [draftCrowd, setDraftCrowd] = useState<CrowdLevel | undefined>(place.crowdLevel);
+  const [draftQueue, setDraftQueue] = useState<QueueLevel | undefined>(place.queueLevel);
+  const [draftVibe, setDraftVibe] = useState<VibeType | undefined>(place.vibe);
 
   return (
     <View style={styles.root}>
@@ -220,15 +251,27 @@ export default function PlaceProfileScreen() {
                     <Text style={styles.infoText}>{place.coverCharge === 0 ? 'Gratuita' : `R$ ${place.coverCharge}`}</Text>
                   </View>
                 )}
-                {place.crowdLevel !== undefined && (
+                {liveCrowd !== undefined && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Lotação agora</Text>
                     <View style={styles.crowdRow}>
                       <View style={[styles.crowdDot, {
-                        backgroundColor: place.crowdLevel === 'baixo' ? '#22C55E' : place.crowdLevel === 'médio' ? '#F59E0B' : place.crowdLevel === 'alto' ? '#EF4444' : '#FF2D78'
+                        backgroundColor: liveCrowd === 'baixo' ? '#22C55E' : liveCrowd === 'médio' ? '#F59E0B' : liveCrowd === 'alto' ? '#EF4444' : '#FF2D78'
                       }]} />
-                      <Text style={styles.infoText}>{place.crowdLevel.charAt(0).toUpperCase() + place.crowdLevel.slice(1)}</Text>
+                      <Text style={styles.infoText}>{liveCrowd.charAt(0).toUpperCase() + liveCrowd.slice(1)}</Text>
                     </View>
+                  </View>
+                )}
+                {liveQueue !== undefined && (
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.infoLabel}>Fila agora</Text>
+                    <Text style={styles.infoText}>{liveQueue.charAt(0).toUpperCase() + liveQueue.slice(1)}</Text>
+                  </View>
+                )}
+                {liveVibe !== undefined && (
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.infoLabel}>Vibe</Text>
+                    <Text style={styles.infoText}>{liveVibe.charAt(0).toUpperCase() + liveVibe.slice(1)}</Text>
                   </View>
                 )}
                 <View style={styles.amenitiesGrid}>
@@ -272,23 +315,36 @@ export default function PlaceProfileScreen() {
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.sm }]}>
-        <TouchableOpacity
-          style={styles.goButton}
-          activeOpacity={0.86}
-          onPress={() => {
-            const query = encodeURIComponent(place.address);
-            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
-          }}
-        >
-          <LinearGradient
-            colors={Colors.gradientBrand}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          />
-          <Navigation color={Colors.white} size={18} strokeWidth={2.3} />
-          <Text style={styles.goText}>Ir pra la</Text>
-        </TouchableOpacity>
+        {reportedAt && (
+          <Text style={styles.reportedMsg}>✓ Atualizado agora · por você</Text>
+        )}
+        <View style={styles.bottomRow}>
+          <TouchableOpacity
+            style={styles.reportButton}
+            activeOpacity={0.86}
+            onPress={() => setReportOpen(true)}
+          >
+            <Radio color={Colors.secondary} size={17} strokeWidth={2.2} />
+            <Text style={styles.reportText}>Reportar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.goButton}
+            activeOpacity={0.86}
+            onPress={() => {
+              const query = encodeURIComponent(place.address);
+              Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+            }}
+          >
+            <LinearGradient
+              colors={Colors.gradientBrand}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+            <Navigation color={Colors.white} size={18} strokeWidth={2.3} />
+            <Text style={styles.goText}>Ir pra la</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Agenda modal */}
@@ -377,6 +433,73 @@ export default function PlaceProfileScreen() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Report modal */}
+      <Modal visible={reportOpen} transparent animationType="none" onRequestClose={() => setReportOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.reportSheet, { paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: reportSlideAnim }] }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reportar agora</Text>
+              <TouchableOpacity onPress={() => setReportOpen(false)} style={styles.modalClose}>
+                <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.reportSectionLabel}>Lotação</Text>
+            <View style={styles.reportChips}>
+              {(['baixo', 'médio', 'alto', 'lotado'] as CrowdLevel[]).map(val => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.reportChip, draftCrowd === val && styles.reportChipActive]}
+                  onPress={() => setDraftCrowd(val)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.chipDot, { backgroundColor: val === 'baixo' ? '#22C55E' : val === 'médio' ? '#F59E0B' : val === 'alto' ? '#EF4444' : '#FF2D78' }]} />
+                  <Text style={[styles.reportChipText, draftCrowd === val && styles.reportChipTextActive]}>
+                    {val.charAt(0).toUpperCase() + val.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.reportSectionLabel}>Fila</Text>
+            <View style={styles.reportChips}>
+              {(['sem fila', 'curta', 'longa'] as QueueLevel[]).map(val => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.reportChip, draftQueue === val && styles.reportChipActive]}
+                  onPress={() => setDraftQueue(val)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.reportChipText, draftQueue === val && styles.reportChipTextActive]}>
+                    {val.charAt(0).toUpperCase() + val.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.reportSectionLabel}>Vibe</Text>
+            <View style={styles.reportChips}>
+              {(['resenha', 'paquera', 'misto'] as VibeType[]).map(val => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.reportChip, draftVibe === val && styles.reportChipActive]}
+                  onPress={() => setDraftVibe(val)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.reportChipText, draftVibe === val && styles.reportChipTextActive]}>
+                    {val.charAt(0).toUpperCase() + val.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.reportSubmit} activeOpacity={0.85} onPress={submitReport}>
+              <Text style={styles.reportSubmitText}>Confirmar report</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
       </Modal>
     </View>
   );
@@ -593,7 +716,36 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#252138',
   },
+  reportedMsg: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: '#22C55E',
+    textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  reportButton: {
+    height: 56,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,45,120,0.4)',
+    backgroundColor: 'rgba(255,45,120,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
+  reportText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.sm,
+    color: Colors.secondary,
+  },
   goButton: {
+    flex: 1,
     height: 56,
     borderRadius: Radius.lg,
     overflow: 'hidden',
@@ -889,5 +1041,71 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.sm,
     color: Colors.textMuted,
+  },
+  reportSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.md,
+  },
+  reportSectionLabel: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: Spacing.xs,
+  },
+  reportChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  reportChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceElevated,
+  },
+  reportChipActive: {
+    borderColor: Colors.secondary,
+    backgroundColor: 'rgba(255,45,120,0.12)',
+  },
+  chipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  reportChipText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  reportChipTextActive: {
+    color: Colors.secondary,
+  },
+  reportSubmit: {
+    height: 52,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.sm,
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+  },
+  reportSubmitText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
+    color: Colors.white,
   },
 });

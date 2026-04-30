@@ -1,3 +1,5 @@
+export type RelationshipStatus = 'solteiro' | 'namorando' | 'ficando' | 'curtindo';
+
 export interface User {
   id: string;
   username: string;
@@ -9,6 +11,7 @@ export interface User {
   followers: number;
   following: number;
   createdAt: number;
+  relationshipStatus?: RelationshipStatus;
 }
 
 export interface Post {
@@ -32,6 +35,10 @@ export interface Post {
   commentCount: number;
 }
 
+export type CrowdLevel = 'baixo' | 'médio' | 'alto' | 'lotado';
+export type QueueLevel = 'sem fila' | 'curta' | 'longa';
+export type VibeType = 'resenha' | 'paquera' | 'misto';
+
 export interface Place {
   id: string;
   name: string;
@@ -49,7 +56,9 @@ export interface Place {
   thumbnail?: string;
   neighborhood?: string;
   priceLevel?: 1 | 2 | 3 | 4 | 5;
-  crowdLevel?: 'baixo' | 'médio' | 'alto' | 'lotado';
+  crowdLevel?: CrowdLevel;
+  queueLevel?: QueueLevel;
+  vibe?: VibeType;
   nearMetro?: boolean;
   hasParking?: boolean;
   hasSeating?: boolean;
@@ -67,6 +76,22 @@ export interface Message {
 export interface Chat {
   id: string;
   participants: User[];
+  lastMessage?: string;
+  lastMessageAt?: number;
+  unreadCount: number;
+  createdAt: number;
+}
+
+export interface VenueChat {
+  id: string;
+  placeId: string;
+  placeName: string;
+  category: Place['category'];
+  thumbnail?: string;
+  memberCount: number;
+  distanceKm: number;
+  isOpen: boolean;
+  closesAt: string;
   lastMessage?: string;
   lastMessageAt?: number;
   unreadCount: number;

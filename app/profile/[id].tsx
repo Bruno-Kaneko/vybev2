@@ -16,6 +16,38 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import type { RelationshipStatus } from '@/types';
+
+const STATUS_CONFIG: Record<RelationshipStatus, { label: string; color: string; bg: string }> = {
+  solteiro:  { label: 'Solteiro(a)', color: '#22C55E', bg: 'rgba(34,197,94,0.12)' },
+  namorando: { label: 'Namorando',   color: '#EF4444', bg: 'rgba(239,68,68,0.12)' },
+  ficando:   { label: 'Ficando',     color: '#A855F7', bg: 'rgba(168,85,247,0.12)' },
+  curtindo:  { label: 'Só curtindo', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)' },
+};
+
+function StatusBadge({ status }: { status: RelationshipStatus }) {
+  const cfg = STATUS_CONFIG[status];
+  return (
+    <View style={[statusStyles.badge, { backgroundColor: cfg.bg, borderColor: cfg.color + '44' }]}>
+      <Text style={[statusStyles.label, { color: cfg.color }]}>{cfg.label}</Text>
+    </View>
+  );
+}
+
+const statusStyles = StyleSheet.create({
+  badge: {
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+  },
+  label: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    letterSpacing: 0.3,
+  },
+});
 
 export default function ProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,6 +81,7 @@ export default function ProfileScreen() {
           <Avatar uri={user.avatar} size="xl" withGradientBorder />
           <Text style={styles.displayName}>{user.displayName}</Text>
           <Text style={styles.username}>@{user.username}</Text>
+          {user.relationshipStatus ? <StatusBadge status={user.relationshipStatus} /> : null}
           {user.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
           {user.instagram ? (
             <TouchableOpacity
