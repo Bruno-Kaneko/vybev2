@@ -251,6 +251,14 @@ const MOCK_GRUPOS = [
   { id: 'g4', name: 'Balada SP — Geral', members: 1240, lastMsg: 'Alguém no Outs?', unread: 21 },
 ];
 
+type DialogConfig = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  onConfirm?: () => void;
+  cancelLabel?: string;
+};
+
 function GrupoesDrawer({
   visible,
   onClose,
@@ -268,6 +276,7 @@ function GrupoesDrawer({
   const SNAP_HALF = Math.min(400, SCREEN_H * 0.58);
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
   const currentH = useRef(SNAP_HALF);
+  const [dialog, setDialog] = useState<DialogConfig | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -323,34 +332,21 @@ function GrupoesDrawer({
                 if (isJoined) return;
 
                 if (joinedGroup !== null) {
-                  // Already in another group
-                  if (Platform.OS === 'web') {
-                    window.alert(`Você precisa sair do "${joinedGroup.name}" para poder entrar nesse grupão.`);
-                  } else {
-                    require('react-native').Alert.alert(
-                      'Você já está em um grupão',
-                      `Saia do "${joinedGroup.name}" para entrar em "${item.name}".`,
-                      [{ text: 'OK' }]
-                    );
-                  }
+                  setDialog({
+                    title: 'Você já está em um grupão',
+                    message: `Saia do "${joinedGroup.name}" para poder entrar em "${item.name}".`,
+                    confirmLabel: 'Entendi',
+                  });
                   return;
                 }
 
-                // Ask to join
-                if (Platform.OS === 'web') {
-                  if (window.confirm(`Deseja entrar no grupão "${item.name}"?`)) {
-                    onJoin({ id: item.id, name: item.name });
-                  }
-                } else {
-                  require('react-native').Alert.alert(
-                    'Entrar no grupão',
-                    `Deseja entrar em "${item.name}"?`,
-                    [
-                      { text: 'Cancelar', style: 'cancel' },
-                      { text: 'Entrar', onPress: () => onJoin({ id: item.id, name: item.name }) },
-                    ]
-                  );
-                }
+                setDialog({
+                  title: 'Entrar no grupão',
+                  message: `Deseja entrar em "${item.name}"?`,
+                  confirmLabel: 'Entrar',
+                  cancelLabel: 'Cancelar',
+                  onConfirm: () => onJoin({ id: item.id, name: item.name }),
+                });
               };
 
               return (
@@ -380,6 +376,37 @@ function GrupoesDrawer({
           />
         </Animated.View>
       </View>
+
+      {/* In-app dialog — rendered outside the drawer sheet so it overlays everything */}
+      <Modal visible={!!dialog} transparent animationType="fade" onRequestClose={() => setDialog(null)}>
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialogCard}>
+            <Text style={styles.dialogTitle}>{dialog?.title}</Text>
+            <Text style={styles.dialogMessage}>{dialog?.message}</Text>
+            <View style={styles.dialogActions}>
+              {dialog?.cancelLabel && (
+                <TouchableOpacity
+                  style={styles.dialogBtnCancel}
+                  activeOpacity={0.8}
+                  onPress={() => setDialog(null)}
+                >
+                  <Text style={styles.dialogBtnCancelText}>{dialog.cancelLabel}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.dialogBtnConfirm}
+                activeOpacity={0.8}
+                onPress={() => {
+                  dialog?.onConfirm?.();
+                  setDialog(null);
+                }}
+              >
+                <Text style={styles.dialogBtnConfirmText}>{dialog?.confirmLabel ?? 'OK'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -774,6 +801,76 @@ const styles = StyleSheet.create({
   unreadText: {
     fontFamily: FontFamily.mono,
     fontSize: 11,
+    color: Colors.white,
+  },
+  // In-app dialog
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing['2xl'],
+  },
+  dialogCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing['2xl'],
+    gap: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 16,
+  },
+  dialogTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+  },
+  dialogMessage: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    lineHeight: FontSize.md * 1.55,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  dialogBtnCancel: {
+    flex: 1,
+    height: 46,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogBtnCancelText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+  },
+  dialogBtnConfirm: {
+    flex: 1,
+    height: 46,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  dialogBtnConfirmText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
     color: Colors.white,
   },
 });
