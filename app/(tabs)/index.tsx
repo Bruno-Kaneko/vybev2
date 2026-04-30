@@ -6,18 +6,19 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
   Animated,
   Share as NativeShare,
   Modal,
   Platform,
   PanResponder,
   useWindowDimensions,
-  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, Heart, MapPin, MessageCircle, Send, Users, X } from 'lucide-react-native';
+import { ArrowUp, Bell, Heart, LogOut, MapPin, MessageCircle, Send, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
@@ -30,6 +31,18 @@ export default function HomeScreen() {
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [grupoesOpen, setGrupoesOpen] = useState(false);
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string } | null>(null);
+  const [groupChatOpen, setGroupChatOpen] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+
+  const handleJoin = (g: { id: string; name: string }) => {
+    setJoinedGroup(g);
+  };
+
+  const handleLeave = () => {
+    setJoinedGroup(null);
+    setGroupChatOpen(false);
+    setCooldownUntil(Date.now() + 5 * 60 * 1000);
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -65,8 +78,19 @@ export default function HomeScreen() {
         onClose={() => setGrupoesOpen(false)}
         insets={insets}
         joinedGroup={joinedGroup}
-        onJoin={g => setJoinedGroup(g)}
+        cooldownUntil={cooldownUntil}
+        onJoin={handleJoin}
+        onOpenChat={() => { setGrupoesOpen(false); setGroupChatOpen(true); }}
       />
+      {joinedGroup && (
+        <GroupChatModal
+          visible={groupChatOpen}
+          group={joinedGroup}
+          insets={insets}
+          onClose={() => setGroupChatOpen(false)}
+          onLeave={handleLeave}
+        />
+      )}
     </View>
   );
 }
@@ -264,13 +288,17 @@ function GrupoesDrawer({
   onClose,
   insets,
   joinedGroup,
+  cooldownUntil,
   onJoin,
+  onOpenChat,
 }: {
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
   joinedGroup: { id: string; name: string } | null;
+  cooldownUntil: number | null;
   onJoin: (g: { id: string; name: string }) => void;
+  onOpenChat: () => void;
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
   const SNAP_HALF = Math.min(400, SCREEN_H * 0.58);
@@ -329,12 +357,28 @@ function GrupoesDrawer({
               const isJoined = joinedGroup?.id === item.id;
 
               const handlePress = () => {
-                if (isJoined) return;
+                if (isJoined) {
+                  onOpenChat();
+                  return;
+                }
 
                 if (joinedGroup !== null) {
                   setDialog({
                     title: 'Você já está em um grupão',
                     message: `Saia do "${joinedGroup.name}" para poder entrar em "${item.name}".`,
+                    confirmLabel: 'Entendi',
+                  });
+                  return;
+                }
+
+                if (cooldownUntil !== null && Date.now() < cooldownUntil) {
+                  const remaining = Math.ceil((cooldownUntil - Date.now()) / 1000);
+                  const mins = Math.floor(remaining / 60);
+                  const secs = remaining % 60;
+                  const timeStr = mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
+                  setDialog({
+                    title: 'Aguarde um pouco',
+                    message: `Você acabou de sair de um grupão. Aguarde ${timeStr} para entrar em outro.`,
                     confirmLabel: 'Entendi',
                   });
                   return;
@@ -408,6 +452,149 @@ function GrupoesDrawer({
         </View>
       </Modal>
     </Modal>
+  );
+}
+
+const MOCK_GROUP_MESSAGES = [
+  { id: 'gm1', senderId: 'user1', senderName: 'Ana Lima', text: 'Galera chegando! 🔥', createdAt: Date.now() - 9 * 60000 },
+  { id: 'gm2', senderId: 'user2', senderName: 'Pedro S.', text: 'Já to aqui na fila, abriu?', createdAt: Date.now() - 7 * 60000 },
+  { id: 'gm3', senderId: 'user3', senderName: 'Julia M.', text: 'Open bar até meia-noite 🍹', createdAt: Date.now() - 5 * 60000 },
+  { id: 'gm4', senderId: 'user1', senderName: 'Ana Lima', text: 'Alguém quer dividir o Uber?', createdAt: Date.now() - 3 * 60000 },
+  { id: 'gm5', senderId: 'user4', senderName: 'Caio R.', text: 'Lineup confirmado 🎧🎧', createdAt: Date.now() - 1 * 60000 },
+];
+
+type GroupMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: number;
+};
+
+function GroupChatModal({
+  visible,
+  group,
+  insets,
+  onClose,
+  onLeave,
+}: {
+  visible: boolean;
+  group: { id: string; name: string };
+  insets: { bottom: number; top: number };
+  onClose: () => void;
+  onLeave: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [messages, setMessages] = useState<GroupMessage[]>(MOCK_GROUP_MESSAGES);
+  const [leaveDialog, setLeaveDialog] = useState(false);
+
+  const send = () => {
+    if (!text.trim()) return;
+    setMessages(prev => [...prev, {
+      id: `gm${Date.now()}`,
+      senderId: 'me',
+      senderName: 'Eu',
+      text: text.trim(),
+      createdAt: Date.now(),
+    }]);
+    setText('');
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={[styles.gcRoot, { paddingTop: insets.top }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <View style={styles.gcHeader}>
+          <View style={styles.gcHeaderLeft}>
+            <Text style={styles.gcSuperLabel}>Grupões</Text>
+            <Text style={styles.gcGroupName} numberOfLines={1}>{group.name}</Text>
+          </View>
+          <View style={styles.gcHeaderRight}>
+            <TouchableOpacity onPress={() => setLeaveDialog(true)} style={styles.gcLeaveBtn} activeOpacity={0.8}>
+              <LogOut color={Colors.secondary} size={16} strokeWidth={2.2} />
+              <Text style={styles.gcLeaveText}>Sair</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={styles.gcCloseBtn} activeOpacity={0.8}>
+              <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <FlatList
+          data={messages}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.gcMessagesList}
+          renderItem={({ item }) => <GroupMessageBubble msg={item} />}
+        />
+
+        <View style={[styles.gcInputRow, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.gcInputShell}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Mensagem..."
+              placeholderTextColor={Colors.textDisabled}
+              style={[styles.gcInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
+              returnKeyType="send"
+              onSubmitEditing={send}
+            />
+            <TouchableOpacity
+              onPress={send}
+              style={[styles.gcSendBtn, !text.trim() && styles.gcSendBtnDisabled]}
+              disabled={!text.trim()}
+            >
+              <ArrowUp color={Colors.white} size={18} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Leave confirmation dialog */}
+      <Modal visible={leaveDialog} transparent animationType="fade" onRequestClose={() => setLeaveDialog(false)}>
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialogCard}>
+            <Text style={styles.dialogTitle}>Sair do grupão?</Text>
+            <Text style={styles.dialogMessage}>
+              Ao sair, você precisará aguardar 5 minutos antes de entrar em outro grupão.
+            </Text>
+            <View style={styles.dialogActions}>
+              <TouchableOpacity
+                style={styles.dialogBtnCancel}
+                activeOpacity={0.8}
+                onPress={() => setLeaveDialog(false)}
+              >
+                <Text style={styles.dialogBtnCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dialogBtnConfirm, { backgroundColor: Colors.secondary }]}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setLeaveDialog(false);
+                  onLeave();
+                }}
+              >
+                <Text style={styles.dialogBtnConfirmText}>Sair</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </Modal>
+  );
+}
+
+function GroupMessageBubble({ msg }: { msg: GroupMessage }) {
+  const isMe = msg.senderId === 'me';
+  return (
+    <View style={[styles.gcBubbleWrapper, isMe && styles.gcBubbleWrapperMe]}>
+      {!isMe && <Text style={styles.gcSenderName}>{msg.senderName}</Text>}
+      <View style={[styles.gcBubble, isMe ? styles.gcBubbleMe : styles.gcBubbleOther]}>
+        <Text style={[styles.gcBubbleText, isMe && { color: Colors.white }]}>{msg.text}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -872,5 +1059,142 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodySemiBold,
     fontSize: FontSize.md,
     color: Colors.white,
+  },
+  // GroupChatModal
+  gcRoot: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  gcHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  gcHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  gcSuperLabel: {
+    fontFamily: FontFamily.mono,
+    fontSize: FontSize.xs,
+    color: Colors.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  gcGroupName: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.lg,
+    color: Colors.white,
+  },
+  gcHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  gcLeaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: 'rgba(255,45,120,0.1)',
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,45,120,0.25)',
+  },
+  gcLeaveText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.secondary,
+  },
+  gcCloseBtn: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gcMessagesList: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.md,
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+  },
+  gcBubbleWrapper: {
+    alignItems: 'flex-start',
+    marginBottom: Spacing.sm,
+  },
+  gcBubbleWrapperMe: {
+    alignItems: 'flex-end',
+  },
+  gcSenderName: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.secondary,
+    marginBottom: 3,
+    paddingHorizontal: Spacing.sm,
+  },
+  gcBubble: {
+    maxWidth: '72%',
+    borderRadius: 22,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  gcBubbleOther: {
+    backgroundColor: Colors.surface,
+    borderBottomLeftRadius: 7,
+  },
+  gcBubbleMe: {
+    backgroundColor: Colors.secondary,
+    borderBottomRightRadius: 7,
+  },
+  gcBubbleText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.text,
+    lineHeight: FontSize.md * 1.5,
+  },
+  gcInputRow: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    backgroundColor: Colors.background,
+  },
+  gcInputShell: {
+    height: 44,
+    backgroundColor: Colors.surface,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: Spacing.lg,
+    paddingRight: 5,
+  },
+  gcInput: {
+    flex: 1,
+    height: '100%',
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.text,
+  },
+  gcSendBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+  },
+  gcSendBtnDisabled: {
+    opacity: 0.4,
   },
 });
