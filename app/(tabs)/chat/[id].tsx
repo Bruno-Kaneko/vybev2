@@ -65,7 +65,7 @@ export default function ChatScreen() {
           inverted={false}
         />
 
-        <View style={[styles.inputRow, { paddingBottom: insets.bottom + 70 }]}>
+        <View style={[styles.inputRow, { paddingBottom: insets.bottom + 62 }]}>
           <View style={styles.inputShell}>
             <TextInput
               value={text}
@@ -73,12 +73,11 @@ export default function ChatScreen() {
               placeholder="Mensagem..."
               placeholderTextColor={Colors.textDisabled}
               style={styles.input}
-              multiline
               returnKeyType="send"
               onSubmitEditing={send}
             />
             <TouchableOpacity onPress={send} style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]} disabled={!text.trim()}>
-              <ArrowUp color={Colors.white} size={20} strokeWidth={2.5} />
+              <ArrowUp color={Colors.white} size={18} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
         </View>
@@ -172,36 +171,33 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.sm,
     backgroundColor: Colors.background,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   inputShell: {
-    minHeight: 44,
-    maxHeight: 128,
+    height: 44,
     backgroundColor: Colors.surface,
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: Colors.border,
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.sm,
+    alignItems: 'center',
     paddingLeft: Spacing.lg,
-    paddingRight: 6,
-    paddingVertical: 6,
+    paddingRight: 5,
   },
   input: {
     flex: 1,
-    minHeight: 32,
-    maxHeight: 112,
+    height: '100%',
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.text,
-    paddingVertical: 6,
   },
   sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: Colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -211,6 +207,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   sendBtnDisabled: {
-    opacity: 0.45,
+    opacity: 0.4,
   },
 });

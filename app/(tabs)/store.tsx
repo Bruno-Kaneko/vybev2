@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   },
   rewardCard: {
     width: '100%',
-    minHeight: 76,
+    height: 80,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.surface,
@@ -178,7 +178,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
     gap: Spacing.md,
     marginBottom: Spacing.md,
   },

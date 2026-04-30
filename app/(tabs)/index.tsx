@@ -343,8 +343,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   postCardPhone: {
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
+    borderWidth: 0,
     borderRadius: 0,
   },
   postHeader: {

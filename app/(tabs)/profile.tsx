@@ -6,25 +6,46 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Edit3, Grid3X3, MapPin, Settings } from 'lucide-react-native';
+import { Edit3, Grid3X3, LogOut, MapPin, Settings } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_POSTS, MOCK_USERS } from '@/constants/MockData';
+import { MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/context/AuthContext';
+import { signOut } from '@/lib/auth';
 
 export default function MyProfileScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user } = useAuth();
   const [message, setMessage] = useState('');
-  const user = MOCK_USERS[0];
-  const userPosts = MOCK_POSTS.filter(p => p.userId === user.id);
+
   const thumbGap = Spacing.xs;
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
+
+  const displayName = user?.user_metadata?.username
+    ?? user?.email?.split('@')[0]
+    ?? 'Usuário';
+  const username = user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
+  const avatarUrl = user?.user_metadata?.avatar_url ?? null;
+
+  const handleLogout = () => {
+    Alert.alert('Sair', 'Tem certeza que quer sair?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Sair', style: 'destructive', onPress: async () => {
+          await signOut();
+          router.replace('/(onboarding)');
+        },
+      },
+    ]);
+  };
 
   return (
     <ScrollView
@@ -41,42 +62,38 @@ export default function MyProfileScreen() {
       <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
         <View style={styles.topRow}>
           <Text style={styles.title}>Perfil</Text>
-          <TouchableOpacity style={styles.settingsButton} activeOpacity={0.8} onPress={() => setMessage('Preferencias abertas em breve.')}>
-            <Settings color={Colors.white} size={21} strokeWidth={2.2} />
-          </TouchableOpacity>
+          <View style={styles.topActions}>
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.8} onPress={() => setMessage('Preferencias em breve.')}>
+              <Settings color={Colors.white} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.8} onPress={handleLogout}>
+              <LogOut color={Colors.secondary} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.hero}>
-          <Avatar uri={user.avatar} size="xl" withGradientBorder />
-          <Text style={styles.displayName}>{user.displayName}</Text>
-          <Text style={styles.username}>@{user.username}</Text>
-          {user.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
+          <Avatar uri={avatarUrl} size="xl" withGradientBorder />
+          <Text style={styles.displayName}>{displayName}</Text>
+          <Text style={styles.username}>@{username}</Text>
         </View>
 
         <View style={styles.statsRow}>
-          <StatItem label="Posts" value={userPosts.length} />
+          <StatItem label="Posts" value={0} />
           <View style={styles.statDivider} />
-          <StatItem label="Seguidores" value={user.followers} />
+          <StatItem label="Seguidores" value={0} />
           <View style={styles.statDivider} />
-          <StatItem label="Seguindo" value={user.following} />
+          <StatItem label="Seguindo" value={0} />
           <View style={styles.statDivider} />
-          <StatItem label="Pontos" value={user.points} highlight />
+          <StatItem label="Pontos" value={0} highlight />
         </View>
 
-        <View style={styles.actionsRow}>
-          <VybeButton
-            label="Editar perfil"
-            onPress={() => setMessage('Editor de perfil em breve.')}
-            style={{ flex: 1 }}
-          />
-          <TouchableOpacity
-            onPress={() => setMessage('Locais recentes em breve.')}
-            style={styles.mapButton}
-            activeOpacity={0.8}
-          >
-            <MapPin color={Colors.secondary} size={20} strokeWidth={2.2} />
-          </TouchableOpacity>
-        </View>
+        <VybeButton
+          label="Editar perfil"
+          onPress={() => setMessage('Editor de perfil em breve.')}
+          fullWidth
+          style={styles.editBtn}
+        />
 
         {message ? <Text style={styles.feedback}>{message}</Text> : null}
 
@@ -144,7 +161,11 @@ const styles = StyleSheet.create({
     fontSize: FontSize['3xl'],
     color: Colors.white,
   },
-  settingsButton: {
+  topActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  iconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -169,14 +190,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textMuted,
-  },
-  bio: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.md,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    marginTop: Spacing.sm,
-    lineHeight: FontSize.md * 1.5,
   },
   statsRow: {
     flexDirection: 'row',
@@ -210,19 +223,8 @@ const styles = StyleSheet.create({
     height: 32,
     backgroundColor: Colors.border,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
+  editBtn: {
     marginBottom: Spacing.md,
-  },
-  mapButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   feedback: {
     fontFamily: FontFamily.body,
