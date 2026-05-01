@@ -265,7 +265,7 @@ function VybeInput({
         secureTextEntry={secureTextEntry}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        style={styles.input}
+        style={[styles.input, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
       />
       {rightAction}
     </View>
@@ -364,8 +364,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.text,
     backgroundColor: 'transparent',
-    // @ts-ignore — web only
-    outlineStyle: 'none',
   },
   iconButton: {
     width: 34,
