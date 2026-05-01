@@ -49,6 +49,7 @@ export default function MyProfileScreen() {
   const [localBio, setLocalBio] = useState<string | null>(null);
   const [statusOpen, setStatusOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<RelationshipStatus | null>(null);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const thumbGap = Spacing.xs;
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
@@ -89,16 +90,10 @@ export default function MyProfileScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('Tem certeza que quer sair?')
-      : await new Promise<boolean>(resolve =>
-          require('react-native').Alert.alert('Sair', 'Tem certeza que quer sair?', [
-            { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Sair', style: 'destructive', onPress: () => resolve(true) },
-          ])
-        );
-    if (!confirmed) return;
+  const handleLogout = () => setLogoutOpen(true);
+
+  const confirmLogout = async () => {
+    setLogoutOpen(false);
     await signOut();
     router.replace('/(onboarding)');
   };
@@ -293,6 +288,23 @@ export default function MyProfileScreen() {
                   <Text style={styles.clearStatusText}>Remover status</Text>
                 </TouchableOpacity>
               )}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        <Modal visible={logoutOpen} transparent animationType="fade" onRequestClose={() => setLogoutOpen(false)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLogoutOpen(false)}>
+            <View style={[styles.modalSheet, styles.logoutSheet]} onStartShouldSetResponder={() => true}>
+              <Text style={styles.modalTitle}>Sair da conta</Text>
+              <Text style={styles.logoutSubtitle}>Tem certeza que quer sair?</Text>
+              <View style={styles.modalActions}>
+                <TouchableOpacity onPress={() => setLogoutOpen(false)} style={styles.cancelBtn}>
+                  <Text style={styles.cancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={confirmLogout} style={styles.logoutConfirmBtn}>
+                  <Text style={styles.logoutConfirmText}>Sair</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </TouchableOpacity>
         </Modal>
@@ -673,5 +685,27 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textDecorationLine: 'underline',
+  },
+  logoutSheet: {
+    gap: Spacing.sm,
+  },
+  logoutSubtitle: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    marginBottom: Spacing.sm,
+  },
+  logoutConfirmBtn: {
+    flex: 2,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.lg,
+    backgroundColor: '#FF4444',
+  },
+  logoutConfirmText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
+    color: Colors.white,
   },
 });
