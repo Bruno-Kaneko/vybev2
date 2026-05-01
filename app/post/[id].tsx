@@ -125,7 +125,7 @@ export default function PostDetailScreen() {
     >
       <ScrollView style={[styles.shell, { maxWidth: responsive.feedMaxWidth }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
             <ChevronLeft color={Colors.white} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Post</Text>
@@ -183,11 +183,11 @@ export default function PostDetailScreen() {
               </Animated.View>
               <Text style={styles.actionLabel}>{likeCount}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentOpen(prev => !prev)}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentOpen(prev => !prev)} activeOpacity={0.75}>
               <MessageCircle color={commentOpen ? Colors.secondary : Colors.white} size={24} strokeWidth={2.2} />
               <Text style={styles.actionLabel}>{comments.length}</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={sharePost} style={styles.actionBtn}>
+            <TouchableOpacity onPress={sharePost} style={styles.actionBtn} activeOpacity={0.75}>
               <Send color={shared ? Colors.secondary : Colors.white} size={23} strokeWidth={2.2} />
               <Text style={styles.actionLabel}>Compartilhar</Text>
             </TouchableOpacity>

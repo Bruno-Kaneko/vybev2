@@ -256,7 +256,7 @@ export default function MyProfileScreen() {
               />
 
               <View style={styles.modalActions}>
-                <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.cancelBtn}>
+                <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.cancelBtn} activeOpacity={0.7}>
                   <Text style={styles.cancelText}>Cancelar</Text>
                 </TouchableOpacity>
                 <VybeButton label="Salvar" onPress={saveEdit} loading={editLoading} style={styles.saveBtn} />

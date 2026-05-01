@@ -20,7 +20,7 @@ import {
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, Bell, Heart, LogOut, MapPin, MessageCircle, Send, Timer, Users, X } from 'lucide-react-native';
+import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
 import { getFeedPosts } from '@/lib/db';
@@ -901,9 +901,12 @@ function GroupMessageBubble({ msg }: { msg: GroupMessage }) {
 }
 
 function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; isPhone: boolean }) {
+  const insets = useSafeAreaInsets();
   const [liked, setLiked] = useState(false);
-  const [shared, setShared] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const likeScale = useState(new Animated.Value(1))[0];
+  const sendScale = useState(new Animated.Value(1))[0];
 
   const handleLike = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -914,17 +917,30 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
     setLiked(prev => !prev);
   };
 
-  const handleShare = async () => {
+  const handleSharePress = () => {
     Haptics.selectionAsync();
-    setShared(true);
-    try {
-      await NativeShare.share({
-        title: 'VYBE',
-        message: `${post.user.displayName} esta em ${post.placeName}: ${post.caption}`,
-      });
-    } catch {
-      setShared(false);
-    }
+    Animated.sequence([
+      Animated.spring(sendScale, { toValue: 0.82, useNativeDriver: true, damping: 5, stiffness: 400 } as any),
+      Animated.spring(sendScale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 280 } as any),
+    ]).start();
+    setShareOpen(true);
+  };
+
+  const handleExternalShare = async () => {
+    setShareOpen(false);
+    await NativeShare.share({
+      title: 'VYBE',
+      message: `${post.user.displayName} está em ${post.placeName} no VYBE! ${post.caption ?? ''}`.trim(),
+    });
+  };
+
+  const toggleSend = (chatId: string) => {
+    Haptics.selectionAsync();
+    setSentTo(prev => {
+      const next = new Set(prev);
+      next.has(chatId) ? next.delete(chatId) : next.add(chatId);
+      return next;
+    });
   };
 
   const likeCount = post.reactions.heart + (liked ? 1 : 0);
@@ -991,9 +1007,11 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
             <MessageCircle color={Colors.white} size={20} strokeWidth={2.1} />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleShare} style={styles.actionButton} activeOpacity={0.75}>
-            <Send color={shared ? Colors.secondary : Colors.white} size={19} strokeWidth={2.1} />
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+            <TouchableOpacity onPress={handleSharePress} style={styles.actionButton} activeOpacity={0.75}>
+              <Send color={sentTo.size > 0 ? Colors.secondary : Colors.white} size={19} strokeWidth={2.1} />
+            </TouchableOpacity>
+          </Animated.View>
         </View>
       </View>
 
@@ -1007,6 +1025,65 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
           <Text style={styles.comments}>Ver todos os {post.commentCount} comentarios</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal visible={shareOpen} transparent animationType="slide" onRequestClose={() => setShareOpen(false)}>
+        <TouchableOpacity style={styles.shareOverlay} activeOpacity={1} onPress={() => setShareOpen(false)} />
+        <View style={[styles.shareSheet, { paddingBottom: insets.bottom + Spacing.xl }]}>
+          <View style={styles.shareHandle} />
+          <Text style={styles.shareTitle}>Encaminhar</Text>
+
+          <FlatList
+            data={MOCK_CHATS}
+            keyExtractor={c => c.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.shareContacts}
+            renderItem={({ item }) => {
+              const other = item.participants[0];
+              const selected = sentTo.has(item.id);
+              return (
+                <TouchableOpacity style={styles.shareContact} onPress={() => toggleSend(item.id)} activeOpacity={0.8}>
+                  <View style={[styles.shareAvatarWrap, selected && styles.shareAvatarSelected]}>
+                    <Avatar uri={other.avatar} size="md" />
+                    {selected && (
+                      <View style={styles.shareCheckBadge}>
+                        <Check color={Colors.white} size={11} strokeWidth={3} />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.shareContactName} numberOfLines={1}>{other.displayName.split(' ')[0]}</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+
+          {sentTo.size > 0 && (
+            <TouchableOpacity
+              style={styles.shareSendBtn}
+              activeOpacity={0.85}
+              onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); setShareOpen(false); setSentTo(new Set()); }}
+            >
+              <Send color={Colors.white} size={18} strokeWidth={2.2} />
+              <Text style={styles.shareSendText}>Enviar para {sentTo.size} {sentTo.size === 1 ? 'pessoa' : 'pessoas'}</Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.shareActions}>
+            <TouchableOpacity style={styles.shareActionBtn} onPress={handleExternalShare} activeOpacity={0.8}>
+              <View style={styles.shareActionIcon}>
+                <Share2 color={Colors.white} size={20} strokeWidth={2.1} />
+              </View>
+              <Text style={styles.shareActionLabel}>Compartilhar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.shareActionBtn} onPress={() => setShareOpen(false)} activeOpacity={0.8}>
+              <View style={styles.shareActionIcon}>
+                <Link color={Colors.white} size={20} strokeWidth={2.1} />
+              </View>
+              <Text style={styles.shareActionLabel}>Copiar link</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1183,6 +1260,107 @@ const styles = StyleSheet.create({
   },
   comments: {
     fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  // Share sheet
+  shareOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  shareSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    paddingTop: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+  },
+  shareHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: Spacing.md,
+  },
+  shareTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+    marginBottom: Spacing.xl,
+  },
+  shareContacts: {
+    gap: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  shareContact: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+    width: 64,
+  },
+  shareAvatarWrap: {
+    borderRadius: 34,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  shareAvatarSelected: {
+    borderColor: Colors.secondary,
+  },
+  shareCheckBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareContactName: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  shareSendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    height: 50,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    marginBottom: Spacing.lg,
+  },
+  shareSendText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
+    color: Colors.white,
+  },
+  shareActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  shareActionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+  },
+  shareActionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  shareActionLabel: {
+    fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.sm,
     color: Colors.textMuted,
   },

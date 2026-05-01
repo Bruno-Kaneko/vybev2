@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Slot, router } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -50,7 +50,22 @@ function RootNavigator() {
   return (
     <>
       <StatusBar style="light" backgroundColor={Colors.background} />
-      <Slot />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: Colors.background },
+          animation: 'slide_from_right',
+          animationDuration: 280,
+        }}
+      >
+        <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+        <Stack.Screen name="(auth)" options={{ animation: 'fade', animationDuration: 220 }} />
+        <Stack.Screen name="(onboarding)" options={{ animation: 'fade', animationDuration: 220 }} />
+        <Stack.Screen name="profile/[id]" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
+        <Stack.Screen name="place/[id]" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
+        <Stack.Screen name="post/[id]" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
+        <Stack.Screen name="preferences" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
+      </Stack>
       {!ready && !hasNavigated && (
         <View style={{ position: 'absolute', inset: 0, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={Colors.secondary} size="large" />
