@@ -352,10 +352,6 @@ const styles = StyleSheet.create({
   },
   inputShellFocused: {
     borderColor: Colors.secondary,
-    shadowColor: Colors.secondary,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
   },
   input: {
     flex: 1,
