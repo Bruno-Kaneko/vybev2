@@ -35,11 +35,13 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import PlaceMap from '@/components/ui/PlaceMap';
-import { getActivePostLocations, searchPostsByPlace } from '@/lib/db';
+import { getActivePostLocations, searchPostsByPlace, searchUsers } from '@/lib/db';
+import type { DBUserResult } from '@/lib/db';
 import type { Place } from '@/types';
 
 type Category = 'Todos' | 'Balada' | 'Bar' | 'Evento' | 'Lounge';
 type ViewMode = 'list' | 'map';
+type SearchMode = 'lugares' | 'pessoas';
 
 const CATEGORIES: Array<{ label: Category; Icon: LucideIcon }> = [
   { label: 'Todos', Icon: Grid2X2 },
@@ -62,6 +64,8 @@ export default function DiscoverScreen() {
     MOCK_POSTS.map(p => ({ lat: p.location.latitude, lng: p.location.longitude }))
   );
   const [realResults, setRealResults] = useState<Array<{ place_name: string; lat: number; lng: number; count: number }>>([]);
+  const [searchMode, setSearchMode] = useState<SearchMode>('lugares');
+  const [userResults, setUserResults] = useState<DBUserResult[]>([]);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -72,12 +76,18 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (!search.trim()) { setRealResults([]); return; }
-    searchTimeout.current = setTimeout(() => {
-      searchPostsByPlace(search.trim()).then(setRealResults).catch(() => {});
-    }, 350);
+    if (!search.trim()) { setRealResults([]); setUserResults([]); return; }
+    if (searchMode === 'pessoas') {
+      searchTimeout.current = setTimeout(() => {
+        searchUsers(search.trim()).then(setUserResults).catch(() => {});
+      }, 350);
+    } else {
+      searchTimeout.current = setTimeout(() => {
+        searchPostsByPlace(search.trim()).then(setRealResults).catch(() => {});
+      }, 350);
+    }
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
-  }, [search]);
+  }, [search, searchMode]);
 
   const filtered = useMemo(() => {
     return MOCK_PLACES.filter(p => {
@@ -196,16 +206,23 @@ export default function DiscoverScreen() {
             viewMode={viewMode}
             setViewMode={setViewMode}
             realResults={realResults}
+            searchMode={searchMode}
+            setSearchMode={setSearchMode}
+            userResults={userResults}
           />
         }
         ListEmptyComponent={
           <View style={[styles.emptyState, { maxWidth: responsive.contentMaxWidth }]}>
             <Search color={Colors.textMuted} size={32} strokeWidth={2} />
-            <Text style={styles.emptyTitle}>Nenhum lugar encontrado</Text>
-            <Text style={styles.emptyText}>Tente outro filtro ou uma busca mais curta.</Text>
+            <Text style={styles.emptyTitle}>
+              {searchMode === 'pessoas' ? 'Nenhum usuário encontrado' : 'Nenhum lugar encontrado'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {searchMode === 'pessoas' ? 'Tente outro nome ou username.' : 'Tente outro filtro ou uma busca mais curta.'}
+            </Text>
           </View>
         }
-        renderItem={({ item }) => (
+        renderItem={searchMode === 'pessoas' ? () => null : ({ item }) => (
           <PlaceCard place={item} columns={responsive.columns} maxWidth={responsive.contentMaxWidth} />
         )}
       />
@@ -227,6 +244,9 @@ function DiscoverHeader({
   viewMode,
   setViewMode,
   realResults,
+  searchMode,
+  setSearchMode,
+  userResults,
 }: {
   search: string;
   setSearch: (value: string) => void;
@@ -241,6 +261,9 @@ function DiscoverHeader({
   viewMode: ViewMode;
   setViewMode: (v: ViewMode) => void;
   realResults: Array<{ place_name: string; lat: number; lng: number; count: number }>;
+  searchMode: SearchMode;
+  setSearchMode: (m: SearchMode) => void;
+  userResults: DBUserResult[];
 }) {
   return (
     <View style={[styles.headerShell, { maxWidth }]}>
@@ -268,10 +291,30 @@ function DiscoverHeader({
         </View>
       </View>
 
+      {/* Mode toggle */}
+      <View style={styles.modeToggle}>
+        <TouchableOpacity
+          style={[styles.modeBtn, searchMode === 'lugares' && styles.modeBtnActive]}
+          onPress={() => setSearchMode('lugares')}
+          activeOpacity={0.8}
+        >
+          <MapPin color={searchMode === 'lugares' ? Colors.white : Colors.textMuted} size={13} strokeWidth={2.2} />
+          <Text style={[styles.modeBtnText, searchMode === 'lugares' && styles.modeBtnTextActive]}>Lugares</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeBtn, searchMode === 'pessoas' && styles.modeBtnActive]}
+          onPress={() => setSearchMode('pessoas')}
+          activeOpacity={0.8}
+        >
+          <Users color={searchMode === 'pessoas' ? Colors.white : Colors.textMuted} size={13} strokeWidth={2.2} />
+          <Text style={[styles.modeBtnText, searchMode === 'pessoas' && styles.modeBtnTextActive]}>Pessoas</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.searchWrapper}>
         <Search color={Colors.textMuted} size={18} strokeWidth={2} />
         <TextInput
-          placeholder="Buscar lugares..."
+          placeholder={searchMode === 'pessoas' ? 'Buscar usuários...' : 'Buscar lugares...'}
           placeholderTextColor={Colors.textDisabled}
           value={search}
           onChangeText={setSearch}
@@ -279,7 +322,45 @@ function DiscoverHeader({
         />
       </View>
 
-      <FlatList
+      {/* User results */}
+      {searchMode === 'pessoas' && userResults.length > 0 && (
+        <View style={styles.userResultsSection}>
+          {userResults.map(u => (
+            <TouchableOpacity
+              key={u.id}
+              style={styles.userRow}
+              onPress={() => router.push(`/profile/${u.id}`)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.userAvatar}>
+                {u.avatar_url ? (
+                  <Image source={{ uri: u.avatar_url }} style={styles.userAvatarImg} />
+                ) : (
+                  <View style={[styles.userAvatarImg, styles.userAvatarFallback]}>
+                    <Text style={styles.userAvatarInitial}>
+                      {(u.display_name ?? u.username)[0].toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.userInfo}>
+                <Text style={styles.userDisplayName}>{u.display_name ?? u.username}</Text>
+                <Text style={styles.userUsername}>@{u.username}</Text>
+              </View>
+              <Text style={styles.userFollowers}>{u.follower_count} seguidores</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {searchMode === 'pessoas' && !search.trim() && (
+        <View style={styles.pessoasHint}>
+          <Users color={Colors.textMuted} size={32} strokeWidth={1.8} />
+          <Text style={styles.pessoasHintText}>Busque por nome ou @username</Text>
+        </View>
+      )}
+
+      {searchMode === 'lugares' && <FlatList
         horizontal
         data={CATEGORIES}
         keyExtractor={item => item.label}
@@ -360,6 +441,7 @@ function DiscoverHeader({
       )}
 
       <Text style={styles.sectionLabel}>{count} lugares encontrados</Text>
+      }
     </View>
   );
 }
@@ -432,6 +514,101 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 3,
+    gap: 3,
+    marginBottom: Spacing.md,
+  },
+  modeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+  },
+  modeBtnActive: {
+    backgroundColor: Colors.secondary,
+  },
+  modeBtnText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+  },
+  modeBtnTextActive: {
+    color: Colors.white,
+  },
+  userResultsSection: {
+    gap: 2,
+    marginBottom: Spacing.md,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  userAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  userAvatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  userAvatarFallback: {
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarInitial: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.lg,
+    color: Colors.secondary,
+  },
+  userInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  userDisplayName: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.white,
+  },
+  userUsername: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  userFollowers: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    flexShrink: 0,
+  },
+  pessoasHint: {
+    alignItems: 'center',
+    paddingVertical: Spacing['3xl'],
+    gap: Spacing.md,
+  },
+  pessoasHintText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
   },
   mapRoot: {
     position: 'relative' as any,

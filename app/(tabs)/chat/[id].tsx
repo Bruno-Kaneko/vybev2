@@ -17,7 +17,7 @@ import { MOCK_USERS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getOrCreateChat, getMessages, sendMessage } from '@/lib/db';
+import { getOrCreateChat, getMessages, sendMessage, getChatCreatedAt } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import type { DBMessage } from '@/lib/db';
 
@@ -47,6 +47,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<MsgRow[]>([]);
   const [remaining, setRemaining] = useState(CHAT_LIFETIME_MS);
   const [chatId, setChatId] = useState<string | null>(null);
+  const [chatExpiresAt, setChatExpiresAt] = useState(Date.now() + CHAT_LIFETIME_MS);
   const flatListRef = useRef<FlatList>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -72,9 +73,9 @@ export default function ChatScreen() {
     });
   }, [id, isReal]);
 
-  // Timer
-  const chat = MOCK_CHATS.find(c => c.participants.some(p => p.id === id));
-  const expiresAt = chat ? chat.createdAt + CHAT_LIFETIME_MS : Date.now() + CHAT_LIFETIME_MS;
+  // Timer — for mock chats use mock data; for real chats use DB created_at
+  const mockChat = MOCK_CHATS.find(c => c.participants.some(p => p.id === id));
+  const expiresAt = isReal ? chatExpiresAt : (mockChat ? mockChat.createdAt + CHAT_LIFETIME_MS : Date.now() + CHAT_LIFETIME_MS);
 
   useEffect(() => {
     const tick = () => setRemaining(Math.max(0, expiresAt - Date.now()));
@@ -89,7 +90,8 @@ export default function ChatScreen() {
     try {
       const cid = await getOrCreateChat(authUser.id, id);
       setChatId(cid);
-      const msgs = await getMessages(cid);
+      const [msgs, createdAt] = await Promise.all([getMessages(cid), getChatCreatedAt(cid)]);
+      setChatExpiresAt(createdAt + CHAT_LIFETIME_MS);
       setMessages(msgs.map(m => ({
         id: m.id,
         senderId: m.sender_id,

@@ -396,6 +396,36 @@ export async function searchPostsByPlace(
 }
 
 // ────────────────────────────────────────────────
+// USER SEARCH
+// ────────────────────────────────────────────────
+
+export type DBUserResult = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  follower_count: number;
+};
+
+export async function searchUsers(query: string): Promise<DBUserResult[]> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_url, follower_count')
+    .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+    .limit(20);
+  return (data ?? []) as DBUserResult[];
+}
+
+export async function getChatCreatedAt(chatId: string): Promise<number> {
+  const { data } = await supabase
+    .from('chats')
+    .select('created_at')
+    .eq('id', chatId)
+    .single();
+  return data ? new Date(data.created_at).getTime() : Date.now();
+}
+
+// ────────────────────────────────────────────────
 // LIKES
 // ────────────────────────────────────────────────
 
