@@ -61,10 +61,10 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
         <Stack.Screen name="(auth)" options={{ animation: 'fade', animationDuration: 220 }} />
         <Stack.Screen name="(onboarding)" options={{ animation: 'fade', animationDuration: 220 }} />
-        <Stack.Screen name="profile/[id]" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
-        <Stack.Screen name="place/[id]" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
-        <Stack.Screen name="post/[id]" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
-        <Stack.Screen name="preferences" options={{ animation: 'slide_from_right', animationDuration: 280 }} />
+        <Stack.Screen name="profile/[id]" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
+        <Stack.Screen name="place/[id]" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
+        <Stack.Screen name="post/[id]" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
+        <Stack.Screen name="preferences" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
       </Stack>
       {!ready && !hasNavigated && (
         <View style={{ position: 'absolute', inset: 0, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>

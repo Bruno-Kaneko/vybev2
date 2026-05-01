@@ -111,31 +111,32 @@ export default function PlaceProfileScreen() {
 
   return (
     <View style={styles.root}>
+      {/* Fixed overlay buttons — outside ScrollView so overflow:hidden on cover never clips them */}
+      <View style={[styles.topActions, { paddingTop: insets.top + Spacing.sm }]} pointerEvents="box-none">
+        <TouchableOpacity onPress={() => router.back()} style={styles.circleButton} activeOpacity={0.8}>
+          <ChevronLeft color={Colors.white} size={21} strokeWidth={2.4} />
+        </TouchableOpacity>
+        <View style={styles.topRight}>
+          <TouchableOpacity onPress={() => setFollowing(prev => !prev)} style={styles.circleButton} activeOpacity={0.8}>
+            <Heart
+              color={following ? Colors.secondary : Colors.white}
+              fill={following ? Colors.secondary : 'transparent'}
+              size={19}
+              strokeWidth={2.2}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.circleButton}
+            activeOpacity={0.8}
+            onPress={() => Share.share({ message: `${place.name} — ${place.address}. Veja no VYBE!` })}
+          >
+            <Share2 color={Colors.white} size={18} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 94 }}>
         <View style={[styles.cover, { paddingTop: insets.top + Spacing.lg }]}>
-          <View style={styles.topActions}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.circleButton} activeOpacity={0.8}>
-              <ChevronLeft color={Colors.white} size={21} strokeWidth={2.4} />
-            </TouchableOpacity>
-            <View style={styles.topRight}>
-              <TouchableOpacity onPress={() => setFollowing(prev => !prev)} style={styles.circleButton} activeOpacity={0.8}>
-                <Heart
-                  color={following ? Colors.secondary : Colors.white}
-                  fill={following ? Colors.secondary : 'transparent'}
-                  size={19}
-                  strokeWidth={2.2}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.circleButton}
-                activeOpacity={0.8}
-                onPress={() => Share.share({ message: `${place.name} — ${place.address}. Veja no VYBE!` })}
-              >
-                <Share2 color={Colors.white} size={18} strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
           <Text style={styles.coverInitials}>{initials}</Text>
 
           <View style={styles.tagsRow}>
@@ -526,10 +527,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   topActions: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
   topRight: {
     flexDirection: 'row',

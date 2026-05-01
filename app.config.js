@@ -7,6 +7,8 @@ module.exports = ({ config }) => {
     plugins: [
       'expo-router',
       'expo-camera',
+      'expo-web-browser',
+      'expo-apple-authentication',
       [
         'expo-image-picker',
         {

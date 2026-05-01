@@ -23,7 +23,7 @@ import Svg, { Circle, Rect, Text as SvgText } from 'react-native-svg';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { BrandLogo, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
-import { signIn, resetPassword } from '@/lib/auth';
+import { signIn, resetPassword, signInWithGoogle, signInWithApple } from '@/lib/auth';
 
 type SocialProvider = 'google' | 'icloud' | 'instagram';
 type SvgIcon = React.ComponentType<{ color: string; size: number }>;
@@ -60,8 +60,28 @@ export default function LoginScreen() {
   };
 
   const handleSocialLogin = async (provider: SocialProvider) => {
+    if (provider === 'instagram') {
+      setIsError(false);
+      setMessage('Login com Instagram em breve!');
+      return;
+    }
     setIsError(false);
-    setMessage(`Login com ${provider} em breve!`);
+    setMessage('');
+    setSocialLoading(provider);
+    try {
+      if (provider === 'google') {
+        const session = await signInWithGoogle();
+        if (session) router.replace('/(tabs)');
+      } else if (provider === 'icloud') {
+        await signInWithApple();
+        router.replace('/(tabs)');
+      }
+    } catch (e: any) {
+      setIsError(true);
+      setMessage(e.message ?? 'Erro ao autenticar.');
+    } finally {
+      setSocialLoading(null);
+    }
   };
 
   const handleForgotPassword = async () => {
