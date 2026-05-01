@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   Grid2X2,
   List,
   Map,
+  MapPin,
   Music,
   Search,
   Sparkles,
@@ -34,7 +35,7 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import PlaceMap from '@/components/ui/PlaceMap';
-import { getActivePostLocations } from '@/lib/db';
+import { getActivePostLocations, searchPostsByPlace } from '@/lib/db';
 import type { Place } from '@/types';
 
 type Category = 'Todos' | 'Balada' | 'Bar' | 'Evento' | 'Lounge';
@@ -60,12 +61,23 @@ export default function DiscoverScreen() {
   const [heatPoints, setHeatPoints] = useState<Array<{ lat: number; lng: number }>>(
     MOCK_POSTS.map(p => ({ lat: p.location.latitude, lng: p.location.longitude }))
   );
+  const [realResults, setRealResults] = useState<Array<{ place_name: string; lat: number; lng: number; count: number }>>([]);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     getActivePostLocations()
       .then(pts => { if (pts.length > 0) setHeatPoints(pts); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (!search.trim()) { setRealResults([]); return; }
+    searchTimeout.current = setTimeout(() => {
+      searchPostsByPlace(search.trim()).then(setRealResults).catch(() => {});
+    }, 350);
+    return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
+  }, [search]);
 
   const filtered = useMemo(() => {
     return MOCK_PLACES.filter(p => {
@@ -183,6 +195,7 @@ export default function DiscoverScreen() {
             setAmenities={setAmenities}
             viewMode={viewMode}
             setViewMode={setViewMode}
+            realResults={realResults}
           />
         }
         ListEmptyComponent={
@@ -213,6 +226,7 @@ function DiscoverHeader({
   setAmenities,
   viewMode,
   setViewMode,
+  realResults,
 }: {
   search: string;
   setSearch: (value: string) => void;
@@ -226,6 +240,7 @@ function DiscoverHeader({
   setAmenities: (fn: (prev: Set<string>) => Set<string>) => void;
   viewMode: ViewMode;
   setViewMode: (v: ViewMode) => void;
+  realResults: Array<{ place_name: string; lat: number; lng: number; count: number }>;
 }) {
   return (
     <View style={[styles.headerShell, { maxWidth }]}>
@@ -330,6 +345,19 @@ function DiscoverHeader({
           );
         })}
       </View>
+
+      {realResults.length > 0 && (
+        <View style={styles.realResultsSection}>
+          <Text style={styles.realResultsLabel}>Posts ativos</Text>
+          {realResults.map(r => (
+            <View key={r.place_name} style={styles.realResultRow}>
+              <MapPin color={Colors.secondary} size={14} strokeWidth={2.2} />
+              <Text style={styles.realResultName} numberOfLines={1}>{r.place_name}</Text>
+              <Text style={styles.realResultCount}>{r.count} {r.count === 1 ? 'post' : 'posts'}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <Text style={styles.sectionLabel}>{count} lugares encontrados</Text>
     </View>
@@ -477,6 +505,41 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingHorizontal: Spacing.xs,
     paddingVertical: 0,
+    backgroundColor: 'transparent',
+  },
+  realResultsSection: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  realResultsLabel: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  realResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: 4,
+  },
+  realResultName: {
+    flex: 1,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.text,
+  },
+  realResultCount: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
   },
   categoriesList: {
     height: 42,

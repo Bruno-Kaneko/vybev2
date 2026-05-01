@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, Grid3X3, LogOut, MapPin, Settings } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { getUserPosts } from '@/lib/db';
+import { getUserPosts, getProfile, updateRelationshipStatus } from '@/lib/db';
 import type { Post } from '@/types';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -59,6 +59,9 @@ export default function MyProfileScreen() {
   useEffect(() => {
     if (!user?.id) return;
     getUserPosts(user.id).then(setMyPosts).catch(() => setMyPosts([]));
+    getProfile(user.id).then(p => {
+      if (p?.relationshipStatus) setLocalStatus(p.relationshipStatus as any);
+    }).catch(() => {});
   }, [user?.id]);
 
   const rawUsername = localUsername ?? user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
@@ -272,7 +275,11 @@ export default function MyProfileScreen() {
                     localStatus === opt.value && { backgroundColor: opt.bg, borderColor: opt.color + '55' },
                   ]}
                   activeOpacity={0.8}
-                  onPress={() => { setLocalStatus(opt.value); setStatusOpen(false); }}
+                  onPress={() => {
+                    setLocalStatus(opt.value);
+                    setStatusOpen(false);
+                    if (user?.id) updateRelationshipStatus(user.id, opt.value).catch(() => {});
+                  }}
                 >
                   <View style={[styles.statusDot, { backgroundColor: opt.color }]} />
                   <Text style={[styles.statusOptionText, localStatus === opt.value && { color: opt.color }]}>
@@ -284,7 +291,11 @@ export default function MyProfileScreen() {
                 </TouchableOpacity>
               ))}
               {localStatus && (
-                <TouchableOpacity style={styles.clearStatus} onPress={() => { setLocalStatus(null); setStatusOpen(false); }}>
+                <TouchableOpacity style={styles.clearStatus} onPress={() => {
+                setLocalStatus(null);
+                setStatusOpen(false);
+                if (user?.id) updateRelationshipStatus(user.id, null).catch(() => {});
+              }}>
                   <Text style={styles.clearStatusText}>Remover status</Text>
                 </TouchableOpacity>
               )}

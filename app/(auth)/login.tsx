@@ -363,6 +363,9 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.text,
+    backgroundColor: 'transparent',
+    // @ts-ignore — web only
+    outlineStyle: 'none',
   },
   iconButton: {
     width: 34,

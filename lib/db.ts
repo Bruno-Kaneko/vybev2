@@ -315,6 +315,87 @@ export async function sendMessage(
 }
 
 // ────────────────────────────────────────────────
+// COMMENTS
+// ────────────────────────────────────────────────
+
+export type DBComment = {
+  id: string;
+  post_id: string;
+  user_id: string;
+  text: string;
+  created_at: string;
+  profiles: Pick<DBProfile, 'id' | 'username' | 'display_name' | 'avatar_url'>;
+};
+
+export async function getPost(postId: string): Promise<Post | null> {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(POST_SELECT)
+    .eq('id', postId)
+    .single();
+  if (error || !data) return null;
+  return mapPost(data as unknown as DBPost);
+}
+
+export async function getComments(postId: string): Promise<DBComment[]> {
+  const { data, error } = await supabase
+    .from('comments')
+    .select('id, post_id, user_id, text, created_at, profiles(id, username, display_name, avatar_url)')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
+  if (error || !data) return [];
+  return data as unknown as DBComment[];
+}
+
+export async function addComment(
+  postId: string,
+  userId: string,
+  text: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('comments')
+    .insert({ post_id: postId, user_id: userId, text });
+  if (error) throw error;
+}
+
+// ────────────────────────────────────────────────
+// PROFILE UPDATE
+// ────────────────────────────────────────────────
+
+export async function updateRelationshipStatus(
+  userId: string,
+  status: string | null
+): Promise<void> {
+  await supabase
+    .from('profiles')
+    .update({ relationship_status: status })
+    .eq('id', userId);
+}
+
+// ────────────────────────────────────────────────
+// DISCOVER SEARCH
+// ────────────────────────────────────────────────
+
+export async function searchPostsByPlace(
+  query: string
+): Promise<Array<{ place_name: string; lat: number; lng: number; count: number }>> {
+  const { data } = await supabase
+    .from('posts')
+    .select('place_name, lat, lng')
+    .gt('expires_at', new Date().toISOString())
+    .ilike('place_name', `%${query}%`)
+    .limit(20);
+  if (!data || data.length === 0) return [];
+  const map = new Map<string, { lat: number; lng: number; count: number }>();
+  for (const row of data as any[]) {
+    const key = row.place_name as string;
+    if (map.has(key)) map.get(key)!.count++;
+    else map.set(key, { lat: row.lat, lng: row.lng, count: 1 });
+  }
+  return Array.from(map.entries()).map(([place_name, v]) => ({ place_name, ...v }));
+}
+
+// ────────────────────────────────────────────────
 // PUSH TOKENS
 // ────────────────────────────────────────────────
 

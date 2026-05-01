@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Share as NativeShare, ScrollView, Animated } from 'react-native';
+import {
+  View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
+  KeyboardAvoidingView, Platform, Share as NativeShare, ScrollView,
+  Animated, ActivityIndicator,
+} from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,26 +12,47 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/context/AuthContext';
+import { getPost, getComments, addComment } from '@/lib/db';
+import type { DBComment } from '@/lib/db';
+import type { Post } from '@/types';
 
-type Comment = { id: string; user: string; text: string };
-const MOCK_COMMENTS: Comment[] = [
-  { id: 'c1', user: 'mari_sp', text: 'Que lugar incrível!' },
-  { id: 'c2', user: 'joao_beats', text: 'To chegando aí 🔥' },
-];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const MOCK_FALLBACK_COMMENTS: DBComment[] = [];
 
 export default function PostDetailScreen() {
   const { id, autoComment } = useLocalSearchParams<{ id: string; autoComment?: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
-  const post = MOCK_POSTS.find(p => p.id === id) ?? MOCK_POSTS[0];
+  const { user } = useAuth();
+  const isReal = UUID_RE.test(id ?? '');
+
+  const [post, setPost] = useState<Post | null>(
+    isReal ? null : (MOCK_POSTS.find(p => p.id === id) ?? MOCK_POSTS[0])
+  );
+  const [loading, setLoading] = useState(isReal);
   const [liked, setLiked] = useState(false);
   const likeScale = useRef(new Animated.Value(1)).current;
   const [shared, setShared] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState<Comment[]>(MOCK_COMMENTS);
+  const [sending, setSending] = useState(false);
+  const [comments, setComments] = useState<DBComment[]>(MOCK_FALLBACK_COMMENTS);
   const commentRef = useRef<TextInput>(null);
   const commentReveal = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isReal) return;
+    setLoading(true);
+    Promise.all([
+      getPost(id),
+      getComments(id),
+    ]).then(([p, c]) => {
+      if (p) setPost(p);
+      setComments(c);
+    }).finally(() => setLoading(false));
+  }, [id]);
 
   useEffect(() => {
     if (autoComment === '1') setCommentOpen(true);
@@ -43,23 +68,55 @@ export default function PostDetailScreen() {
     }
   }, [commentOpen]);
 
-  const sendComment = () => {
+  const sendComment = async () => {
     if (!commentText.trim()) return;
-    setComments(prev => [...prev, { id: `c${Date.now()}`, user: 'eu', text: commentText.trim() }]);
+    const text = commentText.trim();
     setCommentText('');
+    if (isReal && user?.id) {
+      setSending(true);
+      try {
+        await addComment(id, user.id, text);
+        const updated = await getComments(id);
+        setComments(updated);
+      } catch {
+        // silently ignore
+      } finally {
+        setSending(false);
+      }
+    } else {
+      setComments(prev => [...prev, {
+        id: `local_${Date.now()}`,
+        post_id: id,
+        user_id: user?.id ?? 'me',
+        text,
+        created_at: new Date().toISOString(),
+        profiles: { id: user?.id ?? 'me', username: user?.user_metadata?.username ?? 'eu', display_name: null, avatar_url: null },
+      }]);
+    }
   };
 
   const sharePost = async () => {
+    if (!post) return;
     setShared(true);
     try {
       await NativeShare.share({
         title: 'VYBE',
-        message: `${post.user.displayName} esta em ${post.placeName}: ${post.caption}`,
+        message: `${post.user.displayName} está em ${post.placeName}${post.caption ? ': ' + post.caption : ''}`,
       });
     } catch {
       setShared(false);
     }
   };
+
+  if (loading || !post) {
+    return (
+      <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
+        <ActivityIndicator color={Colors.secondary} size="large" />
+      </View>
+    );
+  }
+
+  const likeCount = post.reactions.heart + (liked ? 1 : 0);
 
   return (
     <KeyboardAvoidingView
@@ -103,7 +160,7 @@ export default function PostDetailScreen() {
             <PostTimer expiresAt={post.expiresAt} />
           </View>
 
-          <Text style={styles.caption}>{post.caption}</Text>
+          {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
 
           <View style={styles.actionsRow}>
             <TouchableOpacity
@@ -124,7 +181,7 @@ export default function PostDetailScreen() {
                   strokeWidth={2.2}
                 />
               </Animated.View>
-              <Text style={styles.actionLabel}>{post.reactions.heart + (liked ? 1 : 0)}</Text>
+              <Text style={styles.actionLabel}>{likeCount}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={() => setCommentOpen(prev => !prev)}>
               <MessageCircle color={commentOpen ? Colors.secondary : Colors.white} size={24} strokeWidth={2.2} />
@@ -142,12 +199,21 @@ export default function PostDetailScreen() {
           transform: [{ translateY: commentReveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
           pointerEvents: commentOpen ? 'auto' : 'none',
         }]}>
-          {comments.map(c => (
-            <View key={c.id} style={styles.commentRow}>
-              <Text style={styles.commentUser}>@{c.user}</Text>
-              <Text style={styles.commentText}>{c.text}</Text>
-            </View>
-          ))}
+          {comments.length === 0 ? (
+            <Text style={styles.noComments}>Seja o primeiro a comentar</Text>
+          ) : (
+            comments.map(c => (
+              <View key={c.id} style={styles.commentRow}>
+                <Avatar uri={c.profiles?.avatar_url ?? ''} size="xs" />
+                <View style={styles.commentBody}>
+                  <Text style={styles.commentUser}>
+                    {c.profiles?.display_name ?? c.profiles?.username ?? 'usuario'}
+                  </Text>
+                  <Text style={styles.commentText}>{c.text}</Text>
+                </View>
+              </View>
+            ))
+          )}
           <View style={styles.commentInputRow}>
             <TextInput
               ref={commentRef}
@@ -155,16 +221,23 @@ export default function PostDetailScreen() {
               onChangeText={setCommentText}
               placeholder="Adicionar comentário..."
               placeholderTextColor={Colors.textDisabled}
-              style={[styles.commentInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
+              style={[
+                styles.commentInput,
+                Platform.OS === 'web' && ({ outlineStyle: 'none', backgroundColor: 'transparent' } as any),
+              ]}
               returnKeyType="send"
               onSubmitEditing={sendComment}
+              editable={!sending}
             />
             <TouchableOpacity
               onPress={sendComment}
-              style={[styles.commentSendBtn, !commentText.trim() && { opacity: 0.4 }]}
-              disabled={!commentText.trim()}
+              style={[styles.commentSendBtn, (!commentText.trim() || sending) && { opacity: 0.4 }]}
+              disabled={!commentText.trim() || sending}
             >
-              <ArrowUp color={Colors.white} size={16} strokeWidth={2.5} />
+              {sending
+                ? <ActivityIndicator color={Colors.white} size="small" />
+                : <ArrowUp color={Colors.white} size={16} strokeWidth={2.5} />
+              }
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -179,6 +252,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     alignItems: 'center',
   },
+  center: {
+    justifyContent: 'center',
+  },
   shell: {
     flex: 1,
     width: '100%',
@@ -192,15 +268,26 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     paddingTop: Spacing.md,
   },
+  noComments: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: Spacing.md,
+  },
   commentRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
     alignItems: 'flex-start',
   },
+  commentBody: {
+    flex: 1,
+  },
   commentUser: {
     fontFamily: FontFamily.bodySemiBold,
     fontSize: FontSize.sm,
     color: Colors.secondary,
+    marginBottom: 1,
   },
   commentText: {
     flex: 1,
@@ -315,7 +402,7 @@ const styles = StyleSheet.create({
   handle: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.xs,
-    color: Colors.textDim,
+    color: Colors.textMuted,
     marginTop: 2,
   },
   caption: {
