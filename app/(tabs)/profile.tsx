@@ -50,6 +50,7 @@ export default function MyProfileScreen() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<RelationshipStatus | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [profileStats, setProfileStats] = useState({ followers: 0, following: 0, points: 0 });
 
   const thumbGap = Spacing.xs;
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
@@ -61,6 +62,7 @@ export default function MyProfileScreen() {
     getUserPosts(user.id).then(setMyPosts).catch(() => setMyPosts([]));
     getProfile(user.id).then(p => {
       if (p?.relationshipStatus) setLocalStatus(p.relationshipStatus as any);
+      setProfileStats({ followers: p?.followers ?? 0, following: p?.following ?? 0, points: p?.points ?? 0 });
     }).catch(() => {});
   }, [user?.id]);
 
@@ -209,13 +211,13 @@ export default function MyProfileScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <StatItem label="Posts" value={0} />
+          <StatItem label="Posts" value={myPosts.length} />
           <View style={styles.statDivider} />
-          <StatItem label="Seguidores" value={0} />
+          <StatItem label="Seguidores" value={profileStats.followers} />
           <View style={styles.statDivider} />
-          <StatItem label="Seguindo" value={0} />
+          <StatItem label="Seguindo" value={profileStats.following} />
           <View style={styles.statDivider} />
-          <StatItem label="Pontos" value={0} highlight />
+          <StatItem label="Pontos" value={profileStats.points} highlight />
         </View>
 
         <VybeButton
