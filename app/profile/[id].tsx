@@ -10,6 +10,7 @@ import {
   Modal,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -67,22 +68,32 @@ export default function ProfileScreen() {
   const [reportSent, setReportSent] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   const isReal = UUID_RE.test(id ?? '');
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     if (isReal) {
-      getProfile(id).then(p => { if (p) setProfileUser(p); });
-      getUserPosts(id).then(setUserPosts);
-      if (authUser) {
-        isFollowing(authUser.id, id).then(setFollowing);
-      }
+      Promise.all([
+        getProfile(id),
+        getUserPosts(id),
+        authUser ? isFollowing(authUser.id, id) : Promise.resolve(false),
+      ]).then(([p, posts, following]) => {
+        if (cancelled) return;
+        if (p) setProfileUser(p);
+        setUserPosts(posts);
+        setFollowing(following);
+        setLoadingProfile(false);
+      }).catch(() => { if (!cancelled) setLoadingProfile(false); });
     } else {
       const mock = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
       setProfileUser(mock);
       setUserPosts(MOCK_POSTS.filter(p => p.userId === mock.id));
+      setLoadingProfile(false);
     }
+    return () => { cancelled = true; };
   }, [id, authUser?.id]);
 
   const user = profileUser ?? MOCK_USERS[0];
@@ -108,6 +119,14 @@ export default function ProfileScreen() {
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbGap = Spacing.xs;
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
+
+  if (loadingProfile && isReal) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={Colors.secondary} size="large" />
+      </View>
+    );
+  }
 
   return (
     <>

@@ -68,6 +68,7 @@ export default function HomeScreen() {
   const [activePosts, setActivePosts] = useState<Post[]>(
     MOCK_POSTS.filter(p => p.expiresAt > Date.now())
   );
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadFeed = useCallback(async () => {
     try {
@@ -81,6 +82,12 @@ export default function HomeScreen() {
       setActivePosts(MOCK_POSTS.filter(p => p.expiresAt > Date.now()));
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadFeed();
+    setRefreshing(false);
+  }, [loadFeed]);
 
   useEffect(() => {
     loadFeed();
@@ -108,6 +115,8 @@ export default function HomeScreen() {
         windowSize={5}
         maxToRenderPerBatch={4}
         initialNumToRender={3}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
         contentContainerStyle={[
           styles.feedContent,
           {

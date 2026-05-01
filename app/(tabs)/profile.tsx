@@ -59,11 +59,14 @@ export default function MyProfileScreen() {
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   useEffect(() => {
     if (!user?.id) return;
-    getUserPosts(user.id).then(setMyPosts).catch(() => setMyPosts([]));
+    let cancelled = false;
+    getUserPosts(user.id).then(p => { if (!cancelled) setMyPosts(p); }).catch(() => {});
     getProfile(user.id).then(p => {
+      if (cancelled) return;
       if (p?.relationshipStatus) setLocalStatus(p.relationshipStatus as any);
       setProfileStats({ followers: p?.followers ?? 0, following: p?.following ?? 0, points: p?.points ?? 0 });
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   const rawUsername = localUsername ?? user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
@@ -88,6 +91,7 @@ export default function MyProfileScreen() {
       setLocalBio(editBio.trim() || null);
       setMessage('Perfil atualizado!');
       setEditOpen(false);
+      setTimeout(() => setMessage(''), 3000);
     } catch {
       setMessage('Erro ao salvar. Tente de novo.');
     } finally {

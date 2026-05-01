@@ -178,7 +178,7 @@ export default function DiscoverScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <FlatList
         key={responsive.columns}
-        data={filtered}
+        data={searchMode === 'pessoas' ? [] : filtered}
         numColumns={responsive.columns}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
@@ -222,7 +222,7 @@ export default function DiscoverScreen() {
             </Text>
           </View>
         }
-        renderItem={searchMode === 'pessoas' ? () => null : ({ item }) => (
+        renderItem={({ item }) => (
           <PlaceCard place={item} columns={responsive.columns} maxWidth={responsive.contentMaxWidth} />
         )}
       />
@@ -360,88 +360,89 @@ function DiscoverHeader({
         </View>
       )}
 
-      {searchMode === 'lugares' && <FlatList
-        horizontal
-        data={CATEGORIES}
-        keyExtractor={item => item.label}
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesList}
-        contentContainerStyle={styles.categoriesRow}
-        renderItem={({ item }) => {
-          const selected = activeCategory === item.label;
-          return (
+      {searchMode === 'lugares' && <>
+        <FlatList
+          horizontal
+          data={CATEGORIES}
+          keyExtractor={item => item.label}
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesList}
+          contentContainerStyle={styles.categoriesRow}
+          renderItem={({ item }) => {
+            const selected = activeCategory === item.label;
+            return (
+              <TouchableOpacity
+                onPress={() => setActiveCategory(item.label)}
+                style={[styles.categoryPill, selected && styles.categoryPillActive]}
+                activeOpacity={0.8}
+              >
+                <item.Icon color={selected ? Colors.white : Colors.textMuted} size={15} strokeWidth={2.2} />
+                <Text style={[styles.categoryText, selected && styles.categoryTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+
+        {/* Price filter */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 40, flexGrow: 0, marginBottom: Spacing.sm }} contentContainerStyle={{ alignItems: 'center', gap: Spacing.sm, paddingRight: Spacing.xl }}>
+          {([null, 1, 2, 3, 4, 5] as Array<number | null>).map(p => (
             <TouchableOpacity
-              onPress={() => setActiveCategory(item.label)}
-              style={[styles.categoryPill, selected && styles.categoryPillActive]}
+              key={String(p)}
+              onPress={() => setPriceFilter(priceFilter === p ? null : p)}
+              style={[styles.categoryPill, priceFilter === p && styles.categoryPillActive]}
               activeOpacity={0.8}
             >
-              <item.Icon color={selected ? Colors.white : Colors.textMuted} size={15} strokeWidth={2.2} />
-              <Text style={[styles.categoryText, selected && styles.categoryTextActive]}>
-                {item.label}
+              <Text style={[styles.categoryText, priceFilter === p && styles.categoryTextActive]}>
+                {p === null ? 'Todos preços' : '$'.repeat(p)}
               </Text>
             </TouchableOpacity>
-          );
-        }}
-      />
-
-      {/* Price filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 40, flexGrow: 0, marginBottom: Spacing.sm }} contentContainerStyle={{ alignItems: 'center', gap: Spacing.sm, paddingRight: Spacing.xl }}>
-        {([null, 1, 2, 3, 4, 5] as Array<number | null>).map(p => (
-          <TouchableOpacity
-            key={String(p)}
-            onPress={() => setPriceFilter(priceFilter === p ? null : p)}
-            style={[styles.categoryPill, priceFilter === p && styles.categoryPillActive]}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.categoryText, priceFilter === p && styles.categoryTextActive]}>
-              {p === null ? 'Todos preços' : '$'.repeat(p)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Amenity toggles */}
-      <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg, flexWrap: 'wrap' }}>
-        {[
-          { key: 'metro', label: '🚇 Metrô perto' },
-          { key: 'parking', label: '🅿️ Estacionamento' },
-          { key: 'seating', label: '🪑 Lugar p/ sentar' },
-        ].map(item => {
-          const active = amenities.has(item.key);
-          return (
-            <TouchableOpacity
-              key={item.key}
-              onPress={() => {
-                setAmenities(prev => {
-                  const next = new Set(prev);
-                  active ? next.delete(item.key) : next.add(item.key);
-                  return next;
-                });
-              }}
-              style={[styles.categoryPill, active && styles.categoryPillActive]}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{item.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {realResults.length > 0 && (
-        <View style={styles.realResultsSection}>
-          <Text style={styles.realResultsLabel}>Posts ativos</Text>
-          {realResults.map(r => (
-            <View key={r.place_name} style={styles.realResultRow}>
-              <MapPin color={Colors.secondary} size={14} strokeWidth={2.2} />
-              <Text style={styles.realResultName} numberOfLines={1}>{r.place_name}</Text>
-              <Text style={styles.realResultCount}>{r.count} {r.count === 1 ? 'post' : 'posts'}</Text>
-            </View>
           ))}
-        </View>
-      )}
+        </ScrollView>
 
-      <Text style={styles.sectionLabel}>{count} lugares encontrados</Text>
-      }
+        {/* Amenity toggles */}
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg, flexWrap: 'wrap' }}>
+          {[
+            { key: 'metro', label: '🚇 Metrô perto' },
+            { key: 'parking', label: '🅿️ Estacionamento' },
+            { key: 'seating', label: '🪑 Lugar p/ sentar' },
+          ].map(item => {
+            const active = amenities.has(item.key);
+            return (
+              <TouchableOpacity
+                key={item.key}
+                onPress={() => {
+                  setAmenities(prev => {
+                    const next = new Set(prev);
+                    active ? next.delete(item.key) : next.add(item.key);
+                    return next;
+                  });
+                }}
+                style={[styles.categoryPill, active && styles.categoryPillActive]}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{item.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {realResults.length > 0 && (
+          <View style={styles.realResultsSection}>
+            <Text style={styles.realResultsLabel}>Posts ativos</Text>
+            {realResults.map(r => (
+              <View key={r.place_name} style={styles.realResultRow}>
+                <MapPin color={Colors.secondary} size={14} strokeWidth={2.2} />
+                <Text style={styles.realResultName} numberOfLines={1}>{r.place_name}</Text>
+                <Text style={styles.realResultCount}>{r.count} {r.count === 1 ? 'post' : 'posts'}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <Text style={styles.sectionLabel}>{count} lugares encontrados</Text>
+      </>}
     </View>
   );
 }
