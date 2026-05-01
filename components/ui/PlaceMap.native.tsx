@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import MapboxGL from '@rnmapbox/maps';
-import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import MapView, { Marker, Circle } from 'react-native-maps';
+import { Colors, FontFamily, FontSize, Radius } from '@/constants';
 import type { Place } from '@/types';
 
-import { MAPBOX_PUBLIC_TOKEN } from '@/constants/mapbox-token';
-MapboxGL.setAccessToken(MAPBOX_PUBLIC_TOKEN);
-
-const SP_CENTER: [number, number] = [-46.6416, -23.5505];
+const SP_REGION = {
+  latitude: -23.5505,
+  longitude: -46.6416,
+  latitudeDelta: 0.08,
+  longitudeDelta: 0.08,
+};
 
 const CATEGORY_COLOR: Record<Place['category'], string> = {
   club: Colors.secondary,
   bar: '#7B2FFF',
-  event: Colors.gold,
+  event: Colors.gold ?? '#F59E0B',
   lounge: '#22C55E',
 };
 
@@ -27,75 +29,50 @@ export default function PlaceMap({
   heatPoints?: Array<{ lat: number; lng: number }>;
   style?: any;
 }) {
-  const heatGeoJSON = {
-    type: 'FeatureCollection' as const,
-    features: (heatPoints ?? []).map(p => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-      properties: {},
-    })),
-  };
-
   return (
     <View style={[styles.container, style]}>
-      <MapboxGL.MapView
+      <MapView
         style={StyleSheet.absoluteFill}
-        styleURL="mapbox://styles/mapbox/dark-v11"
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled={false}
-        scaleBarEnabled={false}
+        initialRegion={SP_REGION}
+        userInterfaceStyle="dark"
+        showsUserLocation
+        showsMyLocationButton={false}
+        showsCompass={false}
+        showsScale={false}
       >
-        <MapboxGL.Camera
-          zoomLevel={13}
-          centerCoordinate={SP_CENTER}
-          animationMode="none"
-        />
-
-        {heatPoints && heatPoints.length > 0 && (
-          <MapboxGL.ShapeSource id="heat-source" shape={heatGeoJSON}>
-            <MapboxGL.HeatmapLayer
-              id="heat-layer"
-              style={{
-                heatmapColor: [
-                  'interpolate',
-                  ['linear'],
-                  ['heatmap-density'],
-                  0, 'rgba(0,0,0,0)',
-                  0.2, 'rgba(123,47,255,0.2)',
-                  0.5, 'rgba(200,70,255,0.4)',
-                  0.8, 'rgba(255,45,120,0.6)',
-                  1, 'rgba(255,45,120,0.85)',
-                ],
-                heatmapOpacity: 0.8,
-                heatmapRadius: 55,
-                heatmapIntensity: 1.8,
-              }}
-            />
-          </MapboxGL.ShapeSource>
-        )}
+        {heatPoints?.map((pt, i) => (
+          <Circle
+            key={`heat-${i}`}
+            center={{ latitude: pt.lat, longitude: pt.lng }}
+            radius={200}
+            fillColor="rgba(255,45,120,0.15)"
+            strokeColor="rgba(255,45,120,0.3)"
+            strokeWidth={1}
+          />
+        ))}
 
         {places.map(place => (
-          <MapboxGL.PointAnnotation
+          <Marker
             key={place.id}
-            id={place.id}
-            coordinate={[place.location.longitude, place.location.latitude]}
-            onSelected={() => onSelect(place)}
+            coordinate={{ latitude: place.location.latitude, longitude: place.location.longitude }}
+            onPress={() => onSelect(place)}
+            tracksViewChanges={false}
           >
             <View style={styles.pinOuter}>
               <View style={[styles.pinInner, { backgroundColor: CATEGORY_COLOR[place.category] }]}>
                 <Text style={styles.pinCount}>{place.activeUsers}</Text>
               </View>
             </View>
-          </MapboxGL.PointAnnotation>
+          </Marker>
         ))}
-      </MapboxGL.MapView>
+      </MapView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     overflow: 'hidden',
   },
   pinOuter: {
@@ -106,12 +83,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: Colors.background,
   },
   pinInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },

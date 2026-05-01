@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-"splash": {
+    "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0A0A0F"
@@ -49,6 +49,13 @@
     "scheme": "vybe",
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "cddff45a-f1b3-4292-8b52-35145bd54884"
+      }
+    },
+    "owner": "nekoide"
   }
 }

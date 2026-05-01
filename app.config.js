@@ -1,4 +1,3 @@
-const { withInfoPlist } = require('@expo/config-plugins');
 const appJson = require('./app.json');
 
 module.exports = ({ config }) => {
@@ -8,12 +7,6 @@ module.exports = ({ config }) => {
     plugins: [
       'expo-router',
       'expo-camera',
-      [
-        '@rnmapbox/maps',
-        {
-          RNMapboxMapsDownloadToken: process.env.MAPBOX_SECRET_TOKEN ?? '',
-        },
-      ],
       [
         'expo-image-picker',
         {
