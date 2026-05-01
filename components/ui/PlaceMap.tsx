@@ -11,9 +11,11 @@ const CDN = `https://cdn.jsdelivr.net/npm/maplibre-gl@${MLG_VER}/dist`;
 export default function PlaceMap({
   places,
   onSelect,
+  heatPoints,
 }: {
   places: Place[];
   onSelect: (place: Place) => void;
+  heatPoints?: Array<{ lat: number; lng: number }>;
   style?: any;
 }) {
   const containerRef = useRef<any>(null);
@@ -43,6 +45,40 @@ export default function PlaceMap({
       map.on('load', () => {
         setStatus('ready');
         map.addControl(new mgl.AttributionControl({ compact: true }), 'bottom-right');
+
+        // Heatmap layer
+        if (heatPoints && heatPoints.length > 0) {
+          map.addSource('heat', {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: heatPoints.map(p => ({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+                properties: {},
+              })),
+            },
+          });
+          map.addLayer({
+            id: 'heat-layer',
+            type: 'heatmap',
+            source: 'heat',
+            paint: {
+              'heatmap-weight': 1,
+              'heatmap-intensity': 1.8,
+              'heatmap-radius': 55,
+              'heatmap-color': [
+                'interpolate', ['linear'], ['heatmap-density'],
+                0,   'rgba(0,0,0,0)',
+                0.2, 'rgba(123,47,255,0.2)',
+                0.5, 'rgba(200,70,255,0.4)',
+                0.8, 'rgba(255,45,120,0.6)',
+                1,   'rgba(255,45,120,0.85)',
+              ],
+              'heatmap-opacity': 0.8,
+            },
+          });
+        }
 
         places.forEach(place => {
           // outer: unstyled wrapper — MapLibre writes transform here for positioning

@@ -5,11 +5,13 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from '@/hooks/useFonts';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { Colors } from '@/constants';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 
 function RootNavigator() {
   const fontsLoaded = useFonts();
+  usePushNotifications();
   const { session, loading: authLoading } = useAuth();
   const [fontTimeout, setFontTimeout] = useState(false);
   const didRedirect = useRef(false);

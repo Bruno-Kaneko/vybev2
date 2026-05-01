@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Heart, LogOut, MapPin, MessageCircle, Send, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
+import { getFeedPosts } from '@/lib/db';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import * as Location from 'expo-location';
@@ -63,16 +64,28 @@ export default function HomeScreen() {
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string; closesAtTs: number } | null>(null);
   const [groupChatOpen, setGroupChatOpen] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
-  const [activePosts, setActivePosts] = useState<Post[]>(() =>
+  const [activePosts, setActivePosts] = useState<Post[]>(
     MOCK_POSTS.filter(p => p.expiresAt > Date.now())
   );
 
-  useEffect(() => {
-    const interval = setInterval(() => {
+  const loadFeed = useCallback(async () => {
+    try {
+      const real = await getFeedPosts();
+      if (real.length > 0) {
+        setActivePosts(real);
+      } else {
+        setActivePosts(MOCK_POSTS.filter(p => p.expiresAt > Date.now()));
+      }
+    } catch {
       setActivePosts(MOCK_POSTS.filter(p => p.expiresAt > Date.now()));
-    }, 60_000);
-    return () => clearInterval(interval);
+    }
   }, []);
+
+  useEffect(() => {
+    loadFeed();
+    const interval = setInterval(loadFeed, 60_000);
+    return () => clearInterval(interval);
+  }, [loadFeed]);
 
   const handleJoin = (g: { id: string; name: string; closesAtTs: number }) => {
     setJoinedGroup(g);
@@ -103,6 +116,7 @@ export default function HomeScreen() {
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
             onNotifPress={() => setNotifOpen(true)}
+            notifCount={MOCK_NOTIFS.length}
           />
         }
         renderItem={({ item }) => (
@@ -141,11 +155,12 @@ export default function HomeScreen() {
   );
 }
 
-function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress }: {
+function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress, notifCount }: {
   maxWidth: number;
   onMessagesPress: () => void;
   onGrupoesPress: () => void;
   onNotifPress: () => void;
+  notifCount: number;
 }) {
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -177,6 +192,11 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress }:
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onNotifPress}>
           <Bell color={Colors.white} size={18} strokeWidth={2.1} />
+          {notifCount > 0 && (
+            <View style={styles.notifBadge}>
+              <Text style={styles.notifBadgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onMessagesPress}>
           <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
@@ -1012,6 +1032,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: 'visible',
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.7,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  notifBadgeText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 9,
+    color: Colors.white,
+    lineHeight: 12,
   },
   groupButton: {
     borderColor: 'rgba(255,45,120,0.35)',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,14 +16,15 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/context/AuthContext';
+import { getOrCreateChat, getMessages, sendMessage } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
+import type { DBMessage } from '@/lib/db';
 
 const CHAT_LIFETIME_MS = 8 * 3600 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const MOCK_MESSAGES = [
-  { id: 'm1', senderId: '1', text: 'Vc ainda ta aqui?', createdAt: Date.now() - 5 * 60000 },
-  { id: 'm2', senderId: 'me', text: 'Sim! To no bar do fundo', createdAt: Date.now() - 4 * 60000 },
-  { id: 'm3', senderId: '1', text: 'Que otimo! Vem aqui', createdAt: Date.now() - 2 * 60000 },
-];
+type MsgRow = { id: string; senderId: string; text: string; createdAt: number };
 
 function formatCountdown(ms: number): string {
   if (ms <= 0) return '0s';
@@ -40,13 +41,23 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user: authUser } = useAuth();
   const chatWidth = responsive.isDesktop ? 720 : responsive.contentMaxWidth;
   const [text, setText] = useState('');
-  const [messages, setMessages] = useState(MOCK_MESSAGES);
-  const [remaining, setRemaining] = useState(0);
+  const [messages, setMessages] = useState<MsgRow[]>([]);
+  const [remaining, setRemaining] = useState(CHAT_LIFETIME_MS);
+  const [chatId, setChatId] = useState<string | null>(null);
+  const flatListRef = useRef<FlatList>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const user = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
+  const isReal = UUID_RE.test(id ?? '');
+
+  // Resolve other user display info
+  const mockUser = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
+  const otherName = mockUser.displayName;
+  const otherAvatar = mockUser.avatar;
+
+  // Timer
   const chat = MOCK_CHATS.find(c => c.participants.some(p => p.id === id));
   const expiresAt = chat ? chat.createdAt + CHAT_LIFETIME_MS : Date.now() + CHAT_LIFETIME_MS;
 
@@ -57,14 +68,83 @@ export default function ChatScreen() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [expiresAt]);
 
+  // Init real chat
+  const initRealChat = useCallback(async () => {
+    if (!authUser || !id || !isReal) return;
+    try {
+      const cid = await getOrCreateChat(authUser.id, id);
+      setChatId(cid);
+      const msgs = await getMessages(cid);
+      setMessages(msgs.map(m => ({
+        id: m.id,
+        senderId: m.sender_id,
+        text: m.text,
+        createdAt: new Date(m.created_at).getTime(),
+      })));
+    } catch {}
+  }, [authUser?.id, id]);
+
+  useEffect(() => {
+    if (isReal) {
+      initRealChat();
+    } else {
+      // Mock messages
+      setMessages([
+        { id: 'm1', senderId: id ?? '', text: 'Vc ainda tá aqui?', createdAt: Date.now() - 5 * 60000 },
+        { id: 'm2', senderId: authUser?.id ?? 'me', text: 'Sim! To no bar do fundo', createdAt: Date.now() - 4 * 60000 },
+        { id: 'm3', senderId: id ?? '', text: 'Que ótimo! Vem aqui', createdAt: Date.now() - 2 * 60000 },
+      ]);
+    }
+  }, [isReal, id]);
+
+  // Realtime subscription
+  useEffect(() => {
+    if (!chatId) return;
+    const channel = supabase
+      .channel(`chat-${chatId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
+        (payload) => {
+          const m = payload.new as DBMessage;
+          setMessages(prev => {
+            if (prev.find(p => p.id === m.id)) return prev;
+            return [...prev, {
+              id: m.id,
+              senderId: m.sender_id,
+              text: m.text,
+              createdAt: new Date(m.created_at).getTime(),
+            }];
+          });
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [chatId]);
+
+  const send = async () => {
+    if (!text.trim() || remaining <= 0) return;
+    const trimmed = text.trim();
+    setText('');
+
+    if (isReal && chatId && authUser) {
+      try {
+        await sendMessage(chatId, authUser.id, trimmed);
+      } catch {}
+    } else {
+      setMessages(prev => [...prev, {
+        id: `m${Date.now()}`,
+        senderId: authUser?.id ?? 'me',
+        text: trimmed,
+        createdAt: Date.now(),
+      }]);
+    }
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  };
+
   const isExpired = remaining <= 0;
   const isUrgent = remaining < 30 * 60 * 1000;
-
-  const send = () => {
-    if (!text.trim() || isExpired) return;
-    setMessages(prev => [...prev, { id: `m${Date.now()}`, senderId: 'me', text: text.trim(), createdAt: Date.now() }]);
-    setText('');
-  };
 
   if (isExpired) {
     return (
@@ -74,9 +154,9 @@ export default function ChatScreen() {
             <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
               <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
             </TouchableOpacity>
-            <Avatar uri={user.avatar} size="sm" />
+            <Avatar uri={otherAvatar} size="sm" />
             <View style={styles.headerCopy}>
-              <Text style={styles.headerName}>{user.displayName}</Text>
+              <Text style={styles.headerName}>{otherName}</Text>
             </View>
           </View>
           <View style={styles.encerrado}>
@@ -102,13 +182,13 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
-          <Avatar uri={user.avatar} size="sm" />
+          <Avatar uri={otherAvatar} size="sm" />
           <View style={styles.headerCopy}>
-            <Text style={styles.headerName}>{user.displayName}</Text>
+            <Text style={styles.headerName}>{otherName}</Text>
             <Text style={styles.headerSub}>Ativo agora</Text>
           </View>
           <View style={[styles.expiryBadge, isUrgent && styles.expiryBadgeUrgent]}>
-            <Timer color={isUrgent ? Colors.secondary : Colors.secondary} size={12} strokeWidth={2.2} />
+            <Timer color={Colors.secondary} size={12} strokeWidth={2.2} />
             <Text style={[styles.expiryText, isUrgent && styles.expiryTextUrgent]}>
               {formatCountdown(remaining)}
             </Text>
@@ -116,11 +196,14 @@ export default function ChatScreen() {
         </View>
 
         <FlatList
+          ref={flatListRef}
           data={messages}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.messagesList}
-          renderItem={({ item }) => <MessageBubble msg={item} />}
-          inverted={false}
+          renderItem={({ item }) => (
+            <MessageBubble msg={item} myId={authUser?.id ?? 'me'} />
+          )}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
 
         <View style={[styles.inputRow, { paddingBottom: insets.bottom + 72 }]}>
@@ -134,7 +217,11 @@ export default function ChatScreen() {
               returnKeyType="send"
               onSubmitEditing={send}
             />
-            <TouchableOpacity onPress={send} style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]} disabled={!text.trim()}>
+            <TouchableOpacity
+              onPress={send}
+              style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+              disabled={!text.trim()}
+            >
               <ArrowUp color={Colors.white} size={18} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
@@ -144,29 +231,20 @@ export default function ChatScreen() {
   );
 }
 
-function MessageBubble({ msg }: { msg: typeof MOCK_MESSAGES[0] }) {
-  const isMe = msg.senderId === 'me';
+function MessageBubble({ msg, myId }: { msg: MsgRow; myId: string }) {
+  const isMe = msg.senderId === myId;
   return (
     <View style={[styles.bubbleWrapper, isMe && styles.bubbleWrapperMe]}>
       <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-        <Text style={[styles.bubbleText, isMe && { color: Colors.white }]}>
-          {msg.text}
-        </Text>
+        <Text style={[styles.bubbleText, isMe && { color: Colors.white }]}>{msg.text}</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-  },
-  shell: {
-    flex: 1,
-    width: '100%',
-  },
+  root: { flex: 1, backgroundColor: Colors.background, alignItems: 'center' },
+  shell: { flex: 1, width: '100%' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -177,37 +255,13 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   backBtn: {
-    marginRight: Spacing.xs,
+    width: 36, height: 36,
+    borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
   },
-  expiryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(255,45,120,0.12)',
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,45,120,0.25)',
-  },
-  expiryBadgeUrgent: {
-    backgroundColor: 'rgba(255,45,120,0.22)',
-    borderColor: Colors.secondary,
-  },
-  expiryText: {
-    fontFamily: FontFamily.mono,
-    fontSize: 11,
-    color: Colors.secondary,
-  },
-  expiryTextUrgent: {
-    color: Colors.secondary,
-  },
-  headerCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
+  headerCopy: { flex: 1 },
   headerName: {
-    fontFamily: FontFamily.bodySemiBold,
+    fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.md,
     color: Colors.white,
   },
@@ -216,96 +270,95 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textMuted,
   },
-  messagesList: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.lg,
-    flexGrow: 1,
-    justifyContent: 'flex-end',
+  expiryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(255,45,120,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,45,120,0.25)',
   },
-  bubbleWrapper: {
-    alignItems: 'flex-start',
-    marginBottom: Spacing.xs,
+  expiryBadgeUrgent: {
+    backgroundColor: 'rgba(255,45,120,0.2)',
+    borderColor: Colors.secondary,
   },
-  bubbleWrapperMe: {
-    alignItems: 'flex-end',
+  expiryText: {
+    fontFamily: FontFamily.mono,
+    fontSize: FontSize.xs,
+    color: Colors.secondary,
   },
+  expiryTextUrgent: { color: Colors.secondary },
+  messagesList: { padding: Spacing.lg, gap: Spacing.sm, flexGrow: 1, justifyContent: 'flex-end' },
+  bubbleWrapper: { flexDirection: 'row', marginBottom: Spacing.xs },
+  bubbleWrapperMe: { justifyContent: 'flex-end' },
   bubble: {
-    maxWidth: '72%',
-    borderRadius: 22,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-  },
-  bubbleOther: {
-    backgroundColor: Colors.surface,
-    borderBottomLeftRadius: 7,
+    maxWidth: '75%',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.lg,
   },
   bubbleMe: {
     backgroundColor: Colors.secondary,
-    borderBottomRightRadius: 7,
+    borderBottomRightRadius: 4,
+  },
+  bubbleOther: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderBottomLeftRadius: 4,
   },
   bubbleText: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.text,
-    lineHeight: FontSize.md * 1.5,
+    lineHeight: FontSize.md * 1.4,
   },
-  inputRow: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    backgroundColor: Colors.background,
-  },
+  inputRow: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
   inputShell: {
-    height: 44,
-    backgroundColor: Colors.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: Colors.border,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
     paddingLeft: Spacing.lg,
-    paddingRight: 5,
+    paddingRight: Spacing.xs,
   },
   input: {
     flex: 1,
-    height: '100%',
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.text,
+    paddingVertical: Spacing.md,
   },
   sendBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36, height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Colors.secondary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    margin: 4,
   },
-  sendBtnDisabled: {
-    opacity: 0.4,
-  },
+  sendBtnDisabled: { backgroundColor: Colors.surface },
   encerrado: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.md,
-    paddingHorizontal: Spacing['2xl'],
+    padding: Spacing['2xl'],
   },
   encerradoTitle: {
-    fontFamily: FontFamily.heading,
+    fontFamily: FontFamily.headingMedium,
     fontSize: FontSize.xl,
     color: Colors.white,
-    marginTop: Spacing.sm,
   },
   encerradoSub: {
     fontFamily: FontFamily.body,
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: 'center',
-    lineHeight: FontSize.md * 1.6,
+    lineHeight: FontSize.sm * 1.6,
   },
 });

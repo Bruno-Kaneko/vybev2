@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,23 @@ import {
   TouchableOpacity,
   Image,
   Linking,
+  Modal,
+  Alert,
+  Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AtSign, ChevronLeft, Grid3X3, MapPin, MessageCircle } from 'lucide-react-native';
+import { AtSign, ChevronLeft, Flag, Grid3X3, MapPin, MessageCircle, MoreHorizontal, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
-import type { RelationshipStatus } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser } from '@/lib/db';
+import type { RelationshipStatus, Post, User } from '@/types';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const STATUS_CONFIG: Record<RelationshipStatus, { label: string; color: string; bg: string }> = {
   solteiro:  { label: 'Solteiro(a)', color: '#22C55E', bg: 'rgba(34,197,94,0.12)' },
@@ -53,14 +60,57 @@ export default function ProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user: authUser } = useAuth();
   const [following, setFollowing] = useState(false);
-  const user = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
-  const userPosts = MOCK_POSTS.filter(p => p.userId === user.id);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportSent, setReportSent] = useState(false);
+  const [profileUser, setProfileUser] = useState<User | null>(null);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+
+  const isReal = UUID_RE.test(id ?? '');
+
+  useEffect(() => {
+    if (!id) return;
+    if (isReal) {
+      getProfile(id).then(p => { if (p) setProfileUser(p); });
+      getUserPosts(id).then(setUserPosts);
+      if (authUser) {
+        isFollowing(authUser.id, id).then(setFollowing);
+      }
+    } else {
+      const mock = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
+      setProfileUser(mock);
+      setUserPosts(MOCK_POSTS.filter(p => p.userId === mock.id));
+    }
+  }, [id, authUser?.id]);
+
+  const user = profileUser ?? MOCK_USERS[0];
+
+  const handleFollow = async () => {
+    if (!authUser || !id) return;
+    if (!isReal) { setFollowing(f => !f); return; }
+    setFollowLoading(true);
+    try {
+      if (following) {
+        await unfollowUser(authUser.id, id);
+        setFollowing(false);
+      } else {
+        await followUser(authUser.id, id);
+        setFollowing(true);
+      }
+    } catch {
+      Alert.alert('Erro', 'Não foi possível completar a ação.');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbGap = Spacing.xs;
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
   return (
+    <>
     <ScrollView
       style={[styles.root, { paddingTop: insets.top }]}
       contentContainerStyle={[
@@ -73,9 +123,14 @@ export default function ProfileScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft color={Colors.textMuted} size={22} strokeWidth={2.4} />
-        </TouchableOpacity>
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ChevronLeft color={Colors.textMuted} size={22} strokeWidth={2.4} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setReportSent(false); setReportOpen(true); }} style={styles.moreBtn}>
+            <MoreHorizontal color={Colors.textMuted} size={20} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.hero}>
           <Avatar uri={user.avatar} size="xl" withGradientBorder />
@@ -106,7 +161,8 @@ export default function ProfileScreen() {
         <View style={styles.actionsRow}>
           <VybeButton
             label={following ? 'Seguindo ✓' : 'Seguir'}
-            onPress={() => setFollowing(prev => !prev)}
+            onPress={handleFollow}
+            loading={followLoading}
             variant={following ? 'outline' : 'primary'}
             style={{ flex: 1 }}
           />
@@ -147,6 +203,51 @@ export default function ProfileScreen() {
         </View>
       </View>
     </ScrollView>
+
+    {/* Report modal */}
+    <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
+      <TouchableOpacity style={reportStyles.overlay} activeOpacity={1} onPress={() => setReportOpen(false)}>
+        <View style={reportStyles.sheet} onStartShouldSetResponder={() => true}>
+          <View style={reportStyles.header}>
+            <Flag color={Colors.urgent} size={18} strokeWidth={2.2} />
+            <Text style={reportStyles.title}>Reportar perfil</Text>
+            <TouchableOpacity onPress={() => setReportOpen(false)} style={reportStyles.closeBtn}>
+              <X color={Colors.textMuted} size={18} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+
+          {reportSent ? (
+            <View style={reportStyles.sentBox}>
+              <Text style={reportStyles.sentEmoji}>✅</Text>
+              <Text style={reportStyles.sentTitle}>Reporte enviado</Text>
+              <Text style={reportStyles.sentSub}>Nossa equipe vai analisar em até 24h. Obrigado por ajudar a manter a comunidade segura.</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={reportStyles.sub}>Por que você está reportando este perfil?</Text>
+              {[
+                'Conteúdo inapropriado',
+                'Spam ou conta falsa',
+                'Assédio ou bullying',
+                'Discurso de ódio',
+                'Outro',
+              ].map(reason => (
+                <TouchableOpacity
+                  key={reason}
+                  style={reportStyles.option}
+                  activeOpacity={0.75}
+                  onPress={() => setReportSent(true)}
+                >
+                  <Text style={reportStyles.optionText}>{reason}</Text>
+                  <ChevronLeft color={Colors.textMuted} size={14} strokeWidth={2} style={{ transform: [{ rotate: '180deg' }] }} />
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+    </>
   );
 }
 
@@ -172,12 +273,22 @@ const styles = StyleSheet.create({
   shell: {
     width: '100%',
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   backBtn: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'flex-start',
+  },
+  moreBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   hero: {
     alignItems: 'center',
@@ -310,3 +421,78 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
 });
+
+const reportStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+    paddingBottom: 36,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  title: {
+    flex: 1,
+    fontFamily: FontFamily.headingMedium,
+    fontSize: FontSize.lg,
+    color: Colors.white,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    marginBottom: Spacing.md,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  optionText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.md,
+    color: Colors.text,
+  },
+  sentBox: {
+    alignItems: 'center',
+    paddingVertical: Spacing['2xl'],
+    gap: Spacing.sm,
+  },
+  sentEmoji: {
+    fontSize: 36,
+  },
+  sentTitle: {
+    fontFamily: FontFamily.headingMedium,
+    fontSize: FontSize.lg,
+    color: Colors.white,
+  },
+  sentSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: FontSize.sm * 1.6,
+  },
+});
+

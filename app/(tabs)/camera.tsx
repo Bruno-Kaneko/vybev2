@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle } from 'lucide-react-native';
+import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle, AlignLeft } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_PLACES } from '@/constants/MockData';
 import { VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/context/AuthContext';
+import { uploadPostImage, createPost } from '@/lib/db';
 import type { TimerDuration } from '@/types';
 
 const TIMER_OPTIONS: TimerDuration[] = [2, 4, 6];
@@ -55,7 +57,9 @@ function LocationRow({ item, selected, onPress }: { item: NearbyPlace; selected:
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user } = useAuth();
   const [image, setImage] = useState<string | null>(null);
+  const [caption, setCaption] = useState('');
   const [timer, setTimer] = useState<TimerDuration>(4);
   const [loading, setLoading] = useState(false);
   const [webWarning, setWebWarning] = useState(false);
@@ -122,11 +126,27 @@ export default function CameraScreen() {
   };
 
   const handlePost = async () => {
-    if (!image || !selectedPlace) return;
+    if (!image || !selectedPlace || !user) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setLoading(false);
-    router.replace('/(tabs)');
+    try {
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const imageUrl = await uploadPostImage(user.id, image);
+      await createPost({
+        userId: user.id,
+        imageUrl,
+        caption: caption.trim() || undefined,
+        placeName: selectedPlace.name,
+        placeId: selectedPlace.id,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        durationHours: timer,
+      });
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      Alert.alert('Erro ao publicar', e?.message ?? 'Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const canPost = !!image && locationStatus === 'granted' && !!selectedPlace;
@@ -207,6 +227,22 @@ export default function CameraScreen() {
               ))}
             </View>
             <Text style={styles.timerHint}>Post desaparece em {timer} horas</Text>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <AlignLeft color={Colors.secondary} size={20} strokeWidth={2.2} />
+              <Text style={styles.sectionTitle}>Legenda</Text>
+            </View>
+            <TextInput
+              style={styles.captionInput}
+              placeholder="O que está rolando? (opcional)"
+              placeholderTextColor={Colors.textDisabled}
+              value={caption}
+              onChangeText={setCaption}
+              maxLength={120}
+              multiline
+            />
           </View>
 
           <View style={styles.section}>
@@ -448,6 +484,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: 'center',
+  },
+  captionInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.text,
+    minHeight: 72,
+    textAlignVertical: 'top',
   },
   locationCard: {
     flexDirection: 'row',

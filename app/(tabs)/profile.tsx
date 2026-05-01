@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, Grid3X3, LogOut, MapPin, Settings } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_POSTS } from '@/constants/MockData';
+import { getUserPosts } from '@/lib/db';
+import type { Post } from '@/types';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
@@ -53,7 +54,11 @@ export default function MyProfileScreen() {
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
-  const myPosts = MOCK_POSTS.filter(p => p.userId === user?.id);
+  const [myPosts, setMyPosts] = useState<Post[]>([]);
+  useEffect(() => {
+    if (!user?.id) return;
+    getUserPosts(user.id).then(setMyPosts).catch(() => setMyPosts([]));
+  }, [user?.id]);
 
   const rawUsername = localUsername ?? user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
   const username = rawUsername.replace(/^@/, '');

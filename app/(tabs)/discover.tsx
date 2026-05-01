@@ -31,9 +31,10 @@ import {
 } from 'lucide-react-native';
 
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_PLACES } from '@/constants/MockData';
+import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import PlaceMap from '@/components/ui/PlaceMap';
+import { getActivePostLocations } from '@/lib/db';
 import type { Place } from '@/types';
 
 type Category = 'Todos' | 'Balada' | 'Bar' | 'Evento' | 'Lounge';
@@ -56,6 +57,15 @@ export default function DiscoverScreen() {
   const [amenities, setAmenities] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [heatPoints, setHeatPoints] = useState<Array<{ lat: number; lng: number }>>(
+    MOCK_POSTS.map(p => ({ lat: p.location.latitude, lng: p.location.longitude }))
+  );
+
+  useEffect(() => {
+    getActivePostLocations()
+      .then(pts => { if (pts.length > 0) setHeatPoints(pts); })
+      .catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     return MOCK_PLACES.filter(p => {
@@ -81,6 +91,7 @@ export default function DiscoverScreen() {
         <PlaceMap
           places={filtered}
           onSelect={place => setSelectedPlace(place)}
+          heatPoints={heatPoints}
         />
 
         {/* Floating top bar */}
