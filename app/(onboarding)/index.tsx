@@ -9,6 +9,7 @@ import {
   Animated,
   useWindowDimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -79,11 +80,16 @@ export default function OnboardingScreen() {
     }
   );
 
+  const finishOnboarding = async () => {
+    await AsyncStorage.setItem('vybe_onboarding_seen', 'true');
+    router.replace('/(auth)/login');
+  };
+
   const goNext = () => {
     if (currentIndex < SLIDES.length - 1) {
       scrollRef.current?.scrollTo({ x: (currentIndex + 1) * screenWidth, animated: true });
     } else {
-      router.replace('/(auth)/login');
+      finishOnboarding();
     }
   };
 
@@ -147,7 +153,7 @@ export default function OnboardingScreen() {
           />
 
           <TouchableOpacity
-            onPress={() => router.replace('/(auth)/login')}
+            onPress={finishOnboarding}
             style={[styles.skipButton, isLast && { opacity: 0 }]}
             disabled={isLast}
           >

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Beer, Camera, Check, Crown, Gift, Heart, MapPin, Ticket, Users, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_REWARDS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/context/AuthContext';
+import { getProfile } from '@/lib/db';
 import type { Reward } from '@/types';
 
 type RewardFilter = 'todos' | Reward['category'];
@@ -26,7 +28,15 @@ const REWARD_FILTERS: Array<{ key: RewardFilter; label: string; Icon: LucideIcon
 export default function StoreScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { session } = useAuth();
   const [userPoints, setUserPoints] = useState(0);
+
+  useEffect(() => {
+    if (!session?.user.id) return;
+    getProfile(session.user.id).then(profile => {
+      if (profile?.points) setUserPoints(profile.points);
+    });
+  }, [session?.user.id]);
   const [collected, setCollected] = useState<Set<string>>(new Set());
   const [redeemReward, setRedeemReward] = useState<Reward | null>(null);
   const [redeemed, setRedeemed] = useState(false);

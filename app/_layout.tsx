@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Slot, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,32 +10,38 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { Colors } from '@/constants';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 
+const ONBOARDING_KEY = 'vybe_onboarding_seen';
+
 function RootNavigator() {
   const fontsLoaded = useFonts();
   usePushNotifications();
   const { session, loading: authLoading } = useAuth();
   const [fontTimeout, setFontTimeout] = useState(false);
+  const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
   const didRedirect = useRef(false);
 
   useEffect(() => {
     const t = setTimeout(() => setFontTimeout(true), 2000);
+    AsyncStorage.getItem(ONBOARDING_KEY).then(val => setOnboardingSeen(val === 'true'));
     return () => clearTimeout(t);
   }, []);
 
   const fontsReady = fontsLoaded || fontTimeout;
 
   useEffect(() => {
-    if (!fontsReady || authLoading || didRedirect.current) return;
+    if (!fontsReady || authLoading || onboardingSeen === null || didRedirect.current) return;
 
     didRedirect.current = true;
     requestAnimationFrame(() => {
       if (session) {
         router.replace('/(tabs)');
+      } else if (onboardingSeen) {
+        router.replace('/(auth)/login');
       } else {
         router.replace('/(onboarding)');
       }
     });
-  }, [fontsReady, authLoading, session]);
+  }, [fontsReady, authLoading, session, onboardingSeen]);
 
   const ready = fontsReady && !authLoading;
 
