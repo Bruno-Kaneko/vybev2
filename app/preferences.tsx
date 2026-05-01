@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  Alert,
+  Platform,
   ScrollView,
-  TouchableOpacity,
+  StyleSheet,
   Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,35 +16,96 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  Globe,
   Heart,
   Info,
   Lock,
   MessageCircle,
-  Moon,
   Shield,
+  Sun,
   Trash2,
-  UserX,
+  UserPlus,
+  Users,
 } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
+
+type Prefs = {
+  notifLikes: boolean;
+  notifFollows: boolean;
+  notifMessages: boolean;
+  notifGroups: boolean;
+  notifNearby: boolean;
+  privateProfile: boolean;
+  lightTheme: boolean;
+};
+
+const DEFAULTS: Prefs = {
+  notifLikes: true,
+  notifFollows: true,
+  notifMessages: true,
+  notifGroups: true,
+  notifNearby: false,
+  privateProfile: false,
+  lightTheme: false,
+};
 
 export default function PreferencesScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user } = useAuth();
 
-  // Notification prefs
-  const [notifLikes, setNotifLikes] = useState(true);
-  const [notifFollows, setNotifFollows] = useState(true);
-  const [notifMessages, setNotifMessages] = useState(true);
-  const [notifGroups, setNotifGroups] = useState(true);
-  const [notifNearby, setNotifNearby] = useState(false);
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULTS);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Privacy prefs
-  const [privateProfile, setPrivateProfile] = useState(false);
-  const [showStatus, setShowStatus] = useState(true);
-  const [allowDMs, setAllowDMs] = useState(true);
-  const [showLocation, setShowLocation] = useState(true);
+  // Load saved prefs from Supabase user metadata on mount
+  useEffect(() => {
+    const saved = user?.user_metadata?.preferences as Partial<Prefs> | undefined;
+    if (saved) {
+      setPrefs({ ...DEFAULTS, ...saved });
+    }
+  }, [user]);
+
+  const update = (key: keyof Prefs, value: boolean) => {
+    const next = { ...prefs, [key]: value };
+    setPrefs(next);
+
+    setSaveState('saving');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await supabase.auth.updateUser({ data: { preferences: next } });
+        setSaveState('saved');
+        setTimeout(() => setSaveState('idle'), 1800);
+      } catch {
+        setSaveState('idle');
+      }
+    }, 600);
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm('Tem certeza? Esta ação é irreversível.')
+        : await new Promise<boolean>(resolve =>
+            Alert.alert(
+              'Excluir conta',
+              'Tem certeza? Esta ação é irreversível e todos os seus dados serão apagados.',
+              [
+                { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Excluir', style: 'destructive', onPress: () => resolve(true) },
+              ]
+            )
+          );
+
+    if (!confirmed) return;
+
+    // Client-side: sign out and redirect. Full deletion requires a backend function.
+    await supabase.auth.signOut();
+    router.replace('/(onboarding)');
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -65,7 +128,10 @@ export default function PreferencesScreen() {
             <ChevronLeft color={Colors.white} size={22} strokeWidth={2.4} />
           </TouchableOpacity>
           <Text style={styles.title}>Preferências</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.saveIndicator}>
+            {saveState === 'saving' && <Text style={styles.savingText}>Salvando…</Text>}
+            {saveState === 'saved' && <Text style={styles.savedText}>Salvo ✓</Text>}
+          </View>
         </View>
 
         {/* Notifications */}
@@ -74,41 +140,41 @@ export default function PreferencesScreen() {
           <ToggleRow
             icon={Heart}
             label="Curtidas"
-            sub="Avisar quando alguém curtir seu post"
-            value={notifLikes}
-            onChange={setNotifLikes}
+            sub="Aviso quando alguém curtir seu post"
+            value={prefs.notifLikes}
+            onChange={v => update('notifLikes', v)}
           />
           <Divider />
           <ToggleRow
-            icon={UserX}
+            icon={UserPlus}
             label="Novos seguidores"
-            sub="Avisar quando alguém começar a te seguir"
-            value={notifFollows}
-            onChange={setNotifFollows}
+            sub="Aviso quando alguém começar a te seguir"
+            value={prefs.notifFollows}
+            onChange={v => update('notifFollows', v)}
           />
           <Divider />
           <ToggleRow
             icon={MessageCircle}
             label="Mensagens"
-            sub="Avisar quando receber uma mensagem"
-            value={notifMessages}
-            onChange={setNotifMessages}
+            sub="Aviso quando receber uma mensagem"
+            value={prefs.notifMessages}
+            onChange={v => update('notifMessages', v)}
           />
           <Divider />
           <ToggleRow
-            icon={Globe}
+            icon={Users}
             label="Grupões"
-            sub="Avisar sobre atividade nos grupões que você participa"
-            value={notifGroups}
-            onChange={setNotifGroups}
+            sub="Aviso sobre atividade nos grupões que você participa"
+            value={prefs.notifGroups}
+            onChange={v => update('notifGroups', v)}
           />
           <Divider />
           <ToggleRow
             icon={Bell}
             label="Pessoas por perto"
-            sub="Avisar quando alguém que você segue estiver próximo"
-            value={notifNearby}
-            onChange={setNotifNearby}
+            sub="Aviso quando alguém que você segue estiver próximo"
+            value={prefs.notifNearby}
+            onChange={v => update('notifNearby', v)}
           />
         </View>
 
@@ -118,43 +184,21 @@ export default function PreferencesScreen() {
           <ToggleRow
             icon={Eye}
             label="Perfil privado"
-            sub="Apenas seguidores veem seus posts e stories"
-            value={privateProfile}
-            onChange={setPrivateProfile}
-          />
-          <Divider />
-          <ToggleRow
-            icon={Heart}
-            label="Mostrar status de relacionamento"
-            sub="Exibir no seu perfil público"
-            value={showStatus}
-            onChange={setShowStatus}
-          />
-          <Divider />
-          <ToggleRow
-            icon={MessageCircle}
-            label="Aceitar mensagens diretas"
-            sub="Qualquer pessoa pode te enviar DM"
-            value={allowDMs}
-            onChange={setAllowDMs}
-          />
-          <Divider />
-          <ToggleRow
-            icon={Globe}
-            label="Aparecer no mapa"
-            sub="Sua localização aparece nos pins do mapa"
-            value={showLocation}
-            onChange={setShowLocation}
+            sub="Apenas seguidores aprovados veem seus posts"
+            value={prefs.privateProfile}
+            onChange={v => update('privateProfile', v)}
           />
         </View>
 
         {/* Appearance */}
-        <SectionHeader icon={Moon} label="Aparência" />
+        <SectionHeader icon={Sun} label="Aparência" />
         <View style={styles.card}>
-          <LinkRow
-            icon={Moon}
-            label="Tema"
-            value="Escuro"
+          <ToggleRow
+            icon={Sun}
+            label="Tema claro"
+            sub="Ativar modo claro no app"
+            value={prefs.lightTheme}
+            onChange={v => update('lightTheme', v)}
           />
         </View>
 
@@ -168,9 +212,9 @@ export default function PreferencesScreen() {
           <InfoRow label="Versão" value="1.0.0 (beta)" />
         </View>
 
-        {/* Danger zone */}
+        {/* Delete account */}
         <View style={[styles.card, styles.dangerCard]}>
-          <TouchableOpacity style={styles.dangerRow} activeOpacity={0.75} onPress={() => {}}>
+          <TouchableOpacity style={styles.dangerRow} activeOpacity={0.75} onPress={handleDeleteAccount}>
             <Trash2 color={Colors.urgent} size={18} strokeWidth={2.2} />
             <Text style={styles.dangerText}>Excluir conta</Text>
           </TouchableOpacity>
@@ -209,7 +253,7 @@ function ToggleRow({
       </View>
       <View style={styles.rowText}>
         <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowSub} numberOfLines={1}>{sub}</Text>
+        <Text style={styles.rowSub}>{sub}</Text>
       </View>
       <Switch
         value={value}
@@ -224,12 +268,10 @@ function ToggleRow({
 function LinkRow({
   icon: Icon,
   label,
-  value,
   onPress,
 }: {
   icon: any;
   label: string;
-  value?: string;
   onPress?: () => void;
 }) {
   return (
@@ -238,7 +280,6 @@ function LinkRow({
         <Icon color={Colors.textMuted} size={17} strokeWidth={2.1} />
       </View>
       <Text style={[styles.rowLabel, { flex: 1 }]}>{label}</Text>
-      {value && <Text style={styles.rowValue}>{value}</Text>}
       {onPress && <ChevronRight color={Colors.textMuted} size={16} strokeWidth={2} />}
     </TouchableOpacity>
   );
@@ -280,6 +321,20 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.heading,
     fontSize: FontSize.xl,
     color: Colors.white,
+  },
+  saveIndicator: {
+    width: 70,
+    alignItems: 'flex-end',
+  },
+  savingText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+  },
+  savedText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.success,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -331,6 +386,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.xs,
     color: Colors.textMuted,
+    lineHeight: FontSize.xs * 1.5,
   },
   rowValue: {
     fontFamily: FontFamily.body,
