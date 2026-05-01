@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   ActivityIndicator,
@@ -81,10 +80,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior="padding"
-    >
+    <View style={styles.root}>
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -96,6 +92,7 @@ export default function LoginScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets
       >
         <View style={[styles.panel, { maxWidth: responsive.formMaxWidth }]}>
           <View style={styles.logoSection}>
@@ -182,7 +179,7 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
