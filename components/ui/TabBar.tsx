@@ -24,13 +24,14 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
   const visibleRoutes = state.routes.filter(route => (descriptors[route.key].options as any).href !== null);
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: insets.bottom }]}>
+    <View style={styles.wrapper}>
       <BlurView intensity={40} tint="dark" style={styles.blur}>
         <LinearGradient
           colors={['rgba(20,20,32,0.6)', 'rgba(10,10,15,0.95)']}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.tabRow}>
+
           {visibleRoutes.map(route => {
             const realIndex = state.routes.findIndex(item => item.key === route.key);
             const isFocused = state.index === realIndex;
@@ -63,6 +64,7 @@ export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps
             );
           })}
         </View>
+        <View style={{ height: insets.bottom }} />
       </BlurView>
     </View>
   );

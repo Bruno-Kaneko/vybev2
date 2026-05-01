@@ -103,6 +103,10 @@ export default function HomeScreen() {
         data={activePosts}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        windowSize={5}
+        maxToRenderPerBatch={4}
+        initialNumToRender={3}
         contentContainerStyle={[
           styles.feedContent,
           {
@@ -268,7 +272,8 @@ function MessagesDrawer({
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.drawerContainer}>
         <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: slideAnim }] }]}>
+        <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
           <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
             <View style={styles.drawerHandle} />
           </View>
@@ -290,6 +295,7 @@ function MessagesDrawer({
               </View>
             }
           />
+        </Animated.View>
         </Animated.View>
       </View>
     </Modal>
@@ -393,7 +399,8 @@ function NotificationsDrawer({
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.drawerContainer}>
         <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: slideAnim }] }]}>
+        <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
           <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
             <View style={styles.drawerHandle} />
           </View>
@@ -449,6 +456,7 @@ function NotificationsDrawer({
               );
             }}
           />
+        </Animated.View>
         </Animated.View>
       </View>
     </Modal>
@@ -562,7 +570,8 @@ function GrupoesDrawer({
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.drawerContainer}>
         <TouchableOpacity style={styles.drawerBackdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl, transform: [{ translateY: slideAnim }] }]}>
+        <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
+        <Animated.View style={[styles.drawerSheet, { height: heightAnim, paddingBottom: insets.bottom + Spacing.xl }]}>
           <View {...panResponder.panHandlers} style={styles.drawerHandleArea}>
             <View style={styles.drawerHandle} />
           </View>
@@ -678,6 +687,7 @@ function GrupoesDrawer({
               );
             }}
           />
+        </Animated.View>
         </Animated.View>
       </View>
 

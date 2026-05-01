@@ -117,12 +117,19 @@ export default function CameraScreen() {
     }
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') return;
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [9, 16],
-    });
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.85 });
     if (!result.canceled) setImage(result.assets[0].uri);
+  };
+
+  const handleBack = () => {
+    if (image) {
+      Alert.alert('Descartar post?', 'Sua foto será perdida.', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Descartar', style: 'destructive', onPress: () => router.back() },
+      ]);
+    } else {
+      router.back();
+    }
   };
 
   const handlePost = async () => {
@@ -171,7 +178,7 @@ export default function CameraScreen() {
       >
         <View style={[styles.shell, { maxWidth: responsive.formMaxWidth }]}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
               <X color={Colors.textMuted} size={20} strokeWidth={2.4} />
             </TouchableOpacity>
             <Text style={styles.title}>Novo Post</Text>
@@ -181,7 +188,7 @@ export default function CameraScreen() {
           <TouchableOpacity onPress={openCamera} style={styles.imagePicker} activeOpacity={0.9}>
             {image ? (
               <>
-                <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" />
+                <Image source={{ uri: image }} style={[styles.previewImage, { transform: [{ scaleX: -1 }] }]} resizeMode="cover" />
                 <TouchableOpacity style={styles.retakeBtn} onPress={openCamera} activeOpacity={0.85}>
                   <Camera color={Colors.white} size={16} strokeWidth={2.2} />
                   <Text style={styles.retakeText}>Tirar outra</Text>
