@@ -5,6 +5,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -52,7 +54,10 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -64,7 +69,6 @@ export default function RegisterScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        automaticallyAdjustKeyboardInsets
       >
         <View style={[styles.panel, { maxWidth: responsive.formMaxWidth }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -139,7 +143,7 @@ export default function RegisterScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
