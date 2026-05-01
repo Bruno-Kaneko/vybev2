@@ -13,7 +13,7 @@ import { MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getPost, getComments, addComment } from '@/lib/db';
+import { getPost, getComments, addComment, hasLiked, likePost, unlikePost } from '@/lib/db';
 import type { DBComment } from '@/lib/db';
 import type { Post } from '@/types';
 
@@ -34,6 +34,11 @@ export default function PostDetailScreen() {
   const [loading, setLoading] = useState(isReal);
   const [liked, setLiked] = useState(false);
   const likeScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!isReal || !user?.id) return;
+    hasLiked(id, user.id).then(setLiked).catch(() => {});
+  }, [id, user?.id]);
   const [shared, setShared] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -169,7 +174,12 @@ export default function PostDetailScreen() {
                   Animated.spring(likeScale, { toValue: 1.28, useNativeDriver: true, damping: 4, stiffness: 400 } as any),
                   Animated.spring(likeScale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 260 } as any),
                 ]).start();
-                setLiked(prev => !prev);
+                const next = !liked;
+                setLiked(next);
+                if (isReal && user?.id) {
+                  if (next) likePost(id, user.id).catch(() => {});
+                  else unlikePost(id, user.id).catch(() => {});
+                }
               }}
               style={styles.actionBtn}
             >

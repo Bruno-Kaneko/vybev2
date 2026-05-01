@@ -396,6 +396,28 @@ export async function searchPostsByPlace(
 }
 
 // ────────────────────────────────────────────────
+// LIKES
+// ────────────────────────────────────────────────
+
+export async function hasLiked(postId: string, userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('post_likes')
+    .select('user_id')
+    .eq('post_id', postId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!data;
+}
+
+export async function likePost(postId: string, userId: string): Promise<void> {
+  await supabase.from('post_likes').insert({ post_id: postId, user_id: userId });
+}
+
+export async function unlikePost(postId: string, userId: string): Promise<void> {
+  await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', userId);
+}
+
+// ────────────────────────────────────────────────
 // PUSH TOKENS
 // ────────────────────────────────────────────────
 

@@ -23,7 +23,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts } from '@/lib/db';
+import { getFeedPosts, hasLiked, likePost, unlikePost } from '@/lib/db';
+import { useAuth } from '@/context/AuthContext';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import * as Location from 'expo-location';
@@ -900,13 +901,22 @@ function GroupMessageBubble({ msg }: { msg: GroupMessage }) {
   );
 }
 
+const UUID_RE_FEED = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; isPhone: boolean }) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [liked, setLiked] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const likeScale = useState(new Animated.Value(1))[0];
   const sendScale = useState(new Animated.Value(1))[0];
+  const isRealPost = UUID_RE_FEED.test(post.id);
+
+  useEffect(() => {
+    if (!isRealPost || !user?.id) return;
+    hasLiked(post.id, user.id).then(setLiked).catch(() => {});
+  }, [post.id, user?.id]);
 
   const handleLike = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -914,7 +924,12 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
       Animated.spring(likeScale, { toValue: 1.24, useNativeDriver: true, damping: 5, stiffness: 380 } as any),
       Animated.spring(likeScale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 260 } as any),
     ]).start();
-    setLiked(prev => !prev);
+    const next = !liked;
+    setLiked(next);
+    if (isRealPost && user?.id) {
+      if (next) likePost(post.id, user.id).catch(() => {});
+      else unlikePost(post.id, user.id).catch(() => {});
+    }
   };
 
   const handleSharePress = () => {
