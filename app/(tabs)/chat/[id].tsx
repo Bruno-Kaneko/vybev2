@@ -52,10 +52,25 @@ export default function ChatScreen() {
 
   const isReal = UUID_RE.test(id ?? '');
 
-  // Resolve other user display info
-  const mockUser = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
-  const otherName = mockUser.displayName;
-  const otherAvatar = mockUser.avatar;
+  const [otherName, setOtherName] = useState(() => {
+    const mock = MOCK_USERS.find(u => u.id === id);
+    return mock?.displayName ?? 'Usuário';
+  });
+  const [otherAvatar, setOtherAvatar] = useState(() => {
+    return MOCK_USERS.find(u => u.id === id)?.avatar ?? '';
+  });
+
+  useEffect(() => {
+    if (!isReal || !id) return;
+    import('@/lib/db').then(({ getProfile }) => {
+      getProfile(id).then(p => {
+        if (p) {
+          setOtherName(p.displayName ?? p.username);
+          setOtherAvatar(p.avatar ?? '');
+        }
+      }).catch(() => {});
+    });
+  }, [id, isReal]);
 
   // Timer
   const chat = MOCK_CHATS.find(c => c.participants.some(p => p.id === id));
