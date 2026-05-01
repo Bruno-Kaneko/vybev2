@@ -18,6 +18,7 @@ function RootNavigator() {
   const { session, loading: authLoading } = useAuth();
   const [fontTimeout, setFontTimeout] = useState(false);
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+  const [hasNavigated, setHasNavigated] = useState(false);
   const didRedirect = useRef(false);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ function RootNavigator() {
 
     didRedirect.current = true;
     requestAnimationFrame(() => {
+      setHasNavigated(true);
       if (session) {
         router.replace('/(tabs)');
       } else if (onboardingSeen) {
@@ -49,7 +51,7 @@ function RootNavigator() {
     <>
       <StatusBar style="light" backgroundColor={Colors.background} />
       <Slot />
-      {!ready && (
+      {!ready && !hasNavigated && (
         <View style={{ position: 'absolute', inset: 0, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={Colors.secondary} size="large" />
         </View>
