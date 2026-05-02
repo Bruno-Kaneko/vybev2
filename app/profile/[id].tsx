@@ -74,6 +74,10 @@ export default function ProfileScreen() {
 
   const isReal = UUID_RE.test(id ?? '');
   const isOwnProfile = isReal && id === authUser?.id;
+
+  useEffect(() => {
+    if (isOwnProfile) router.replace('/(tabs)/profile');
+  }, [isOwnProfile]);
   const [requestStatus, setRequestStatus] = useState<FollowRequestStatus>('none');
   const [requestLoading, setRequestLoading] = useState(false);
 

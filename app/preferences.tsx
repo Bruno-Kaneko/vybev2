@@ -35,7 +35,7 @@ import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { setProfilePrivacy } from '@/lib/db';
+import { setProfilePrivacy, setOnlineStatusVisibility } from '@/lib/db';
 import { VybeButton } from '@/components/ui';
 
 type Prefs = {
@@ -45,6 +45,7 @@ type Prefs = {
   notifGroups: boolean;
   notifNearby: boolean;
   privateProfile: boolean;
+  showOnlineStatus: boolean;
 };
 
 const DEFAULTS: Prefs = {
@@ -54,6 +55,7 @@ const DEFAULTS: Prefs = {
   notifGroups: true,
   notifNearby: false,
   privateProfile: false,
+  showOnlineStatus: true,
 };
 
 export default function PreferencesScreen() {
@@ -89,6 +91,9 @@ export default function PreferencesScreen() {
         await supabase.auth.updateUser({ data: { preferences: next } });
         if (key === 'privateProfile' && user?.id) {
           await setProfilePrivacy(user.id, value);
+        }
+        if (key === 'showOnlineStatus' && user?.id) {
+          await setOnlineStatusVisibility(user.id, value);
         }
         setSaveState('saved');
         setTimeout(() => setSaveState('idle'), 1800);
@@ -249,6 +254,14 @@ export default function PreferencesScreen() {
             sub="Apenas seguidores aprovados veem seus posts"
             value={prefs.privateProfile}
             onChange={v => update('privateProfile', v)}
+          />
+          <Divider />
+          <ToggleRow
+            icon={Eye}
+            label="Status online"
+            sub="Permite que outros vejam quando você esteve ativo"
+            value={prefs.showOnlineStatus}
+            onChange={v => update('showOnlineStatus', v)}
           />
         </View>
 

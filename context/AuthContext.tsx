@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { ensureProfile } from '@/lib/db';
+import { ensureProfile, updateLastSeen } from '@/lib/db';
 
 type AuthContextType = {
   session: Session | null;
@@ -40,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             session.user.email ?? '',
             session.user.user_metadata?.username
           ).catch(() => {});
+          updateLastSeen(session.user.id).catch(() => {});
         }
       } else if (event === 'SIGNED_OUT') {
         setSession(null);

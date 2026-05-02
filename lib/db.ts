@@ -17,6 +17,8 @@ export type DBProfile = {
   follower_count: number;
   following_count: number;
   is_private: boolean;
+  last_seen_at: string | null;
+  show_online_status: boolean;
   created_at: string;
 };
 
@@ -76,6 +78,8 @@ export function mapProfile(p: DBProfile): User {
     createdAt: new Date(p.created_at).getTime(),
     relationshipStatus: (p.relationship_status as any) ?? undefined,
     isPrivate: p.is_private ?? false,
+    lastSeenAt: p.last_seen_at ? new Date(p.last_seen_at).getTime() : null,
+    showOnlineStatus: p.show_online_status ?? true,
   };
 }
 
@@ -471,6 +475,14 @@ export async function rejectFollowRequest(requesterId: string, targetId: string)
 
 export async function setProfilePrivacy(userId: string, isPrivate: boolean): Promise<void> {
   await supabase.from('profiles').update({ is_private: isPrivate }).eq('id', userId);
+}
+
+export async function updateLastSeen(userId: string): Promise<void> {
+  await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', userId);
+}
+
+export async function setOnlineStatusVisibility(userId: string, show: boolean): Promise<void> {
+  await supabase.from('profiles').update({ show_online_status: show }).eq('id', userId);
 }
 
 // ────────────────────────────────────────────────

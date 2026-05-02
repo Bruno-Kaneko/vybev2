@@ -13,6 +13,8 @@ export interface User {
   createdAt: number;
   relationshipStatus?: RelationshipStatus;
   isPrivate?: boolean;
+  lastSeenAt?: number | null;
+  showOnlineStatus?: boolean;
 }
 
 export interface Post {

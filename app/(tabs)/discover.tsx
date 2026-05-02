@@ -81,7 +81,7 @@ export default function DiscoverScreen() {
   const saveRecentSearch = useCallback((query: string) => {
     if (!query) return;
     setRecentSearches(prev => {
-      const next = [query, ...prev.filter(s => s !== query)].slice(0, 8);
+      const next = [query, ...prev.filter(s => s !== query)].slice(0, 15);
       AsyncStorage.setItem('recentUserSearches', JSON.stringify(next)).catch(() => {});
       return next;
     });

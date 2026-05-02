@@ -26,6 +26,16 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type MsgRow = { id: string; senderId: string; text: string; createdAt: number };
 
+function formatLastSeen(lastSeenAt: number | null, showOnlineStatus: boolean): string {
+  if (!showOnlineStatus) return '';
+  if (!lastSeenAt) return '';
+  const diff = Date.now() - lastSeenAt;
+  if (diff < 2 * 60 * 1000) return 'Ativo agora';
+  if (diff < 60 * 60 * 1000) return `Ativo há ${Math.floor(diff / 60000)} min`;
+  if (diff < 24 * 60 * 60 * 1000) return `Ativo há ${Math.floor(diff / 3600000)}h`;
+  return `Ativo há ${Math.floor(diff / 86400000)}d`;
+}
+
 function formatCountdown(ms: number): string {
   if (ms <= 0) return '0s';
   const totalSeconds = Math.floor(ms / 1000);
@@ -60,6 +70,8 @@ export default function ChatScreen() {
   const [otherAvatar, setOtherAvatar] = useState(() => {
     return MOCK_USERS.find(u => u.id === id)?.avatar ?? '';
   });
+  const [otherLastSeen, setOtherLastSeen] = useState<number | null>(null);
+  const [otherShowOnlineStatus, setOtherShowOnlineStatus] = useState(true);
 
   useEffect(() => {
     if (!isReal || !id) return;
@@ -68,6 +80,8 @@ export default function ChatScreen() {
         if (p) {
           setOtherName(p.displayName ?? p.username);
           setOtherAvatar(p.avatar ?? '');
+          setOtherLastSeen(p.lastSeenAt ?? null);
+          setOtherShowOnlineStatus(p.showOnlineStatus ?? true);
         }
       }).catch(() => {});
     });
@@ -181,13 +195,19 @@ export default function ChatScreen() {
       <View style={[styles.root, { paddingTop: insets.top }]}>
         <View style={[styles.shell, { maxWidth: chatWidth }]}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
+            <TouchableOpacity onPress={() => router.replace('/(tabs)/chat')} style={styles.backBtn}>
               <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
             </TouchableOpacity>
-            <Avatar uri={otherAvatar} size="sm" />
-            <View style={styles.headerCopy}>
-              <Text style={styles.headerName}>{otherName}</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.headerProfile}
+              onPress={() => isReal && router.push(`/profile/${id}`)}
+              activeOpacity={isReal ? 0.75 : 1}
+            >
+              <Avatar uri={otherAvatar} size="sm" />
+              <View style={styles.headerCopy}>
+                <Text style={styles.headerName}>{otherName}</Text>
+              </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.encerrado}>
             <LockKeyhole color={Colors.textMuted} size={44} strokeWidth={1.5} />
@@ -209,14 +229,23 @@ export default function ChatScreen() {
     >
       <View style={[styles.shell, { maxWidth: chatWidth }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/chat')} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
-          <Avatar uri={otherAvatar} size="sm" />
-          <View style={styles.headerCopy}>
-            <Text style={styles.headerName}>{otherName}</Text>
-            <Text style={styles.headerSub}>Ativo agora</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.headerProfile}
+            onPress={() => isReal && router.push(`/profile/${id}`)}
+            activeOpacity={isReal ? 0.75 : 1}
+          >
+            <Avatar uri={otherAvatar} size="sm" />
+            <View style={styles.headerCopy}>
+              <Text style={styles.headerName}>{otherName}</Text>
+              {(() => {
+                const status = formatLastSeen(otherLastSeen, otherShowOnlineStatus);
+                return status ? <Text style={styles.headerSub}>{status}</Text> : null;
+              })()}
+            </View>
+          </TouchableOpacity>
           <View style={[styles.expiryBadge, isUrgent && styles.expiryBadgeUrgent]}>
             <Timer color={Colors.secondary} size={12} strokeWidth={2.2} />
             <Text style={[styles.expiryText, isUrgent && styles.expiryTextUrgent]}>
@@ -289,6 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
   },
+  headerProfile: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerCopy: { flex: 1 },
   headerName: {
     fontFamily: FontFamily.bodyMedium,
