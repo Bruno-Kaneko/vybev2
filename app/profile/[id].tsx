@@ -170,9 +170,17 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <StatItem label="Seguidores" value={user.followers} />
+          <StatItem
+            label="Seguidores"
+            value={user.followers}
+            onPress={isReal ? () => router.push({ pathname: '/followers/[id]', params: { id: id!, type: 'followers' } }) : undefined}
+          />
           <View style={styles.statDivider} />
-          <StatItem label="Seguindo" value={user.following} />
+          <StatItem
+            label="Seguindo"
+            value={user.following}
+            onPress={isReal ? () => router.push({ pathname: '/followers/[id]', params: { id: id!, type: 'following' } }) : undefined}
+          />
           <View style={styles.statDivider} />
           <StatItem label="Pontos" value={user.points} highlight />
         </View>
@@ -270,15 +278,23 @@ export default function ProfileScreen() {
   );
 }
 
-function StatItem({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <View style={styles.statItem}>
+function StatItem({ label, value, highlight, onPress }: { label: string; value: number; highlight?: boolean; onPress?: () => void }) {
+  const content = (
+    <>
       <Text style={[styles.statValue, highlight && { color: Colors.gold }]}>
         {value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
       </Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </>
   );
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.statItem} onPress={onPress} activeOpacity={0.7}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={styles.statItem}>{content}</View>;
 }
 
 const styles = StyleSheet.create({

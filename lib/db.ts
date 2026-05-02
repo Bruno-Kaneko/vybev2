@@ -460,3 +460,54 @@ export async function savePushToken(
     .from('push_tokens')
     .upsert({ user_id: userId, token, platform }, { onConflict: 'user_id,token' });
 }
+
+// ────────────────────────────────────────────────
+// NOTIFICATIONS
+// ────────────────────────────────────────────────
+
+export type DBNotification = {
+  id: string;
+  user_id: string;
+  actor_id: string;
+  type: 'like' | 'follow' | 'comment' | 'message';
+  post_id: string | null;
+  text: string;
+  read: boolean;
+  created_at: string;
+  actor: { id: string; username: string; display_name: string | null; avatar_url: string | null } | null;
+};
+
+export async function getNotifications(userId: string): Promise<DBNotification[]> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, user_id, actor_id, type, post_id, text, read, created_at, actor:profiles!actor_id(id, username, display_name, avatar_url)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error || !data) return [];
+  return data as unknown as DBNotification[];
+}
+
+// ────────────────────────────────────────────────
+// FOLLOWERS / FOLLOWING
+// ────────────────────────────────────────────────
+
+export async function getFollowers(userId: string): Promise<DBUserResult[]> {
+  const { data } = await supabase
+    .from('follows')
+    .select('follower:profiles!follower_id(id, username, display_name, avatar_url, follower_count)')
+    .eq('following_id', userId)
+    .limit(200);
+  if (!data) return [];
+  return (data as any[]).map((row: any) => row.follower).filter(Boolean) as DBUserResult[];
+}
+
+export async function getFollowing(userId: string): Promise<DBUserResult[]> {
+  const { data } = await supabase
+    .from('follows')
+    .select('following:profiles!following_id(id, username, display_name, avatar_url, follower_count)')
+    .eq('follower_id', userId)
+    .limit(200);
+  if (!data) return [];
+  return (data as any[]).map((row: any) => row.following).filter(Boolean) as DBUserResult[];
+}

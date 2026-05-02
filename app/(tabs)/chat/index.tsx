@@ -1,17 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircle } from 'lucide-react-native';
 
 import { Colors, FontFamily, FontSize, Spacing } from '@/constants';
-import { MOCK_CHATS, MOCK_USERS } from '@/constants/MockData';
 import { Avatar, Badge } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { getChats } from '@/lib/db';
 import type { DBChat } from '@/lib/db';
-import type { Chat } from '@/types';
 
 type RowItem = {
   id: string;
@@ -22,6 +20,7 @@ type RowItem = {
   lastMessageAt?: number;
   unread: number;
 };
+
 
 function toRowItem(chat: DBChat, myId: string): RowItem {
   const iAmA = chat.participant_a === myId;
@@ -37,40 +36,23 @@ function toRowItem(chat: DBChat, myId: string): RowItem {
   };
 }
 
-function mockToRow(chat: Chat): RowItem {
-  const other = chat.participants[0];
-  return {
-    id: chat.id,
-    otherId: other.id,
-    otherName: other.displayName,
-    otherAvatar: other.avatar,
-    lastMessage: chat.lastMessage,
-    lastMessageAt: chat.lastMessageAt,
-    unread: chat.unreadCount,
-  };
-}
-
 export default function ChatListScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const { user } = useAuth();
-  const [rows, setRows] = useState<RowItem[]>(MOCK_CHATS.map(mockToRow));
+  const [rows, setRows] = useState<RowItem[]>([]);
 
   const load = useCallback(async () => {
     if (!user) return;
     try {
       const real = await getChats(user.id);
-      if (real.length > 0) {
-        setRows(real.map(c => toRowItem(c, user.id)));
-      } else {
-        setRows(MOCK_CHATS.map(mockToRow));
-      }
+      setRows(real.map(c => toRowItem(c, user.id)));
     } catch {
-      setRows(MOCK_CHATS.map(mockToRow));
+      setRows([]);
     }
   }, [user?.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>

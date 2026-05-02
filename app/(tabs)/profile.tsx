@@ -217,9 +217,17 @@ export default function MyProfileScreen() {
         <View style={styles.statsRow}>
           <StatItem label="Posts" value={myPosts.length} />
           <View style={styles.statDivider} />
-          <StatItem label="Seguidores" value={profileStats.followers} />
+          <StatItem
+            label="Seguidores"
+            value={profileStats.followers}
+            onPress={user?.id ? () => router.push({ pathname: '/followers/[id]', params: { id: user.id, type: 'followers' } }) : undefined}
+          />
           <View style={styles.statDivider} />
-          <StatItem label="Seguindo" value={profileStats.following} />
+          <StatItem
+            label="Seguindo"
+            value={profileStats.following}
+            onPress={user?.id ? () => router.push({ pathname: '/followers/[id]', params: { id: user.id, type: 'following' } }) : undefined}
+          />
           <View style={styles.statDivider} />
           <StatItem label="Pontos" value={profileStats.points} highlight />
         </View>
@@ -373,15 +381,23 @@ export default function MyProfileScreen() {
   );
 }
 
-function StatItem({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <View style={styles.statItem}>
+function StatItem({ label, value, highlight, onPress }: { label: string; value: number; highlight?: boolean; onPress?: () => void }) {
+  const content = (
+    <>
       <Text style={[styles.statValue, highlight && { color: Colors.gold }]}>
         {value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
       </Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </>
   );
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.statItem} onPress={onPress} activeOpacity={0.7}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={styles.statItem}>{content}</View>;
 }
 
 const styles = StyleSheet.create({

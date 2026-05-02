@@ -118,7 +118,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!chatId) return;
     const channel = supabase
-      .channel(`chat-${chatId}`)
+      .channel(`chat-${chatId}-${Date.now()}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },

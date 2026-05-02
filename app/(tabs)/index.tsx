@@ -22,13 +22,14 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_POSTS, MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, hasLiked, likePost, unlikePost } from '@/lib/db';
+import { MOCK_CHATS } from '@/constants/MockData';
+import { getFeedPosts, hasLiked, likePost, unlikePost, getNotifications, getChats } from '@/lib/db';
+import type { DBNotification, DBChat } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import * as Location from 'expo-location';
-import type { Post, Chat } from '@/types';
+import type { Post } from '@/types';
 
 const MAX_JOIN_RADIUS_KM = 0.5;
 
@@ -65,21 +66,17 @@ export default function HomeScreen() {
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string; closesAtTs: number } | null>(null);
   const [groupChatOpen, setGroupChatOpen] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
-  const [activePosts, setActivePosts] = useState<Post[]>(
-    MOCK_POSTS.filter(p => p.expiresAt > Date.now())
-  );
+  const [activePosts, setActivePosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [notifs, setNotifs] = useState<DBNotification[]>([]);
+  const [realChats, setRealChats] = useState<DBChat[]>([]);
 
   const loadFeed = useCallback(async () => {
     try {
       const real = await getFeedPosts();
-      if (real.length > 0) {
-        setActivePosts(real);
-      } else {
-        setActivePosts(MOCK_POSTS.filter(p => p.expiresAt > Date.now()));
-      }
+      setActivePosts(real);
     } catch {
-      setActivePosts(MOCK_POSTS.filter(p => p.expiresAt > Date.now()));
+      setActivePosts([]);
     }
   }, []);
 
@@ -94,6 +91,13 @@ export default function HomeScreen() {
     const interval = setInterval(loadFeed, 60_000);
     return () => clearInterval(interval);
   }, [loadFeed]);
+
+  const { user: authUserHome } = useAuth();
+  useEffect(() => {
+    if (!authUserHome) return;
+    getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
+    getChats(authUserHome.id).then(setRealChats).catch(() => {});
+  }, [authUserHome?.id]);
 
   const handleJoin = (g: { id: string; name: string; closesAtTs: number }) => {
     setJoinedGroup(g);
@@ -130,22 +134,32 @@ export default function HomeScreen() {
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
             onNotifPress={() => setNotifOpen(true)}
-            notifCount={MOCK_NOTIFS.length}
+            notifCount={notifs.filter(n => !n.read).length}
           />
         }
         renderItem={({ item }) => (
           <PostCard post={item} maxWidth={responsive.feedMaxWidth} isPhone={responsive.isPhone} />
         )}
+        ListEmptyComponent={
+          !refreshing ? (
+            <View style={styles.feedEmpty}>
+              <Text style={styles.feedEmptyTitle}>Tá quieto por aqui...</Text>
+              <Text style={styles.feedEmptySub}>Seja o primeiro a postar onde você está!</Text>
+            </View>
+          ) : null
+        }
       />
       <MessagesDrawer
         visible={messagesOpen}
         onClose={() => setMessagesOpen(false)}
         insets={insets}
+        chats={realChats}
       />
       <NotificationsDrawer
         visible={notifOpen}
         onClose={() => setNotifOpen(false)}
         insets={insets}
+        notifs={notifs}
       />
       <GrupoesDrawer
         visible={grupoesOpen}
@@ -220,18 +234,47 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress, n
   );
 }
 
+function DrawerRealChatRow({ chat, myId, onClose }: { chat: DBChat; myId: string; onClose: () => void }) {
+  const iAmA = myId === chat.participant_a;
+  const other = iAmA ? chat.profile_b : chat.profile_a;
+  const otherId = iAmA ? chat.participant_b : chat.participant_a;
+  const diff = chat.last_message_at ? Date.now() - new Date(chat.last_message_at).getTime() : 0;
+  const mins = Math.floor(diff / 60000);
+  const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;
+  return (
+    <TouchableOpacity
+      style={styles.drawerRow}
+      activeOpacity={0.8}
+      onPress={() => { onClose(); router.push(`/(tabs)/chat/${otherId}` as any); }}
+    >
+      <Avatar uri={other?.avatar_url ?? ''} size="md" />
+      <View style={styles.drawerRowInfo}>
+        <View style={styles.drawerRowTop}>
+          <Text style={[styles.drawerRowName, { color: Colors.white }]}>{other?.display_name ?? other?.username ?? 'Usuário'}</Text>
+          <Text style={styles.drawerRowTime}>{timeStr}</Text>
+        </View>
+        <Text style={styles.drawerRowPreview} numberOfLines={1}>{chat.last_message ?? ''}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 function MessagesDrawer({
   visible,
   onClose,
   insets,
+  chats,
 }: {
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
+  chats: DBChat[];
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
   const SNAP_HALF = Math.min(348, SCREEN_H * 0.52);
   const SNAP_FULL = SCREEN_H;
+  const { user: drawerMe } = useAuth();
+  const myId = drawerMe?.id ?? '';
 
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
   const currentH = useRef(SNAP_HALF);
@@ -294,10 +337,10 @@ function MessagesDrawer({
             </TouchableOpacity>
           </View>
           <FlatList
-            data={MOCK_CHATS.slice(0, 3)}
+            data={chats.slice(0, 3)}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => <DrawerChatRow chat={item} onClose={onClose} />}
+            renderItem={({ item }) => <DrawerRealChatRow chat={item} myId={myId} onClose={onClose} />}
             ListEmptyComponent={
               <View style={styles.drawerEmpty}>
                 <MessageCircle color={Colors.textMuted} size={40} strokeWidth={1.8} />
@@ -312,59 +355,17 @@ function MessagesDrawer({
   );
 }
 
-function DrawerChatRow({ chat, onClose }: { chat: Chat; onClose: () => void }) {
-  const other = chat.participants[0];
-  const diff = Date.now() - (chat.lastMessageAt ?? 0);
-  const mins = Math.floor(diff / 60000);
-  const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;
-
-  return (
-    <TouchableOpacity
-      style={styles.drawerRow}
-      activeOpacity={0.8}
-      onPress={() => {
-        onClose();
-        router.push(`/(tabs)/chat/${other.id}` as any);
-      }}
-    >
-      <View style={styles.drawerAvatarWrap}>
-        <Avatar uri={other.avatar} size="md" />
-        {chat.unreadCount > 0 && <View style={styles.drawerDot} />}
-      </View>
-      <View style={styles.drawerRowInfo}>
-        <View style={styles.drawerRowTop}>
-          <Text style={[styles.drawerRowName, chat.unreadCount > 0 && { color: Colors.white }]}>
-            {other.displayName}
-          </Text>
-          <Text style={styles.drawerRowTime}>{timeStr}</Text>
-        </View>
-        <Text
-          style={[styles.drawerRowPreview, chat.unreadCount > 0 && { color: Colors.text }]}
-          numberOfLines={1}
-        >
-          {chat.lastMessage}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-const MOCK_NOTIFS = [
-  { id: 'n1', type: 'like', user: 'Ana Lima', text: 'curtiu seu post', time: Date.now() - 3 * 60000, link: '/post/p1' },
-  { id: 'n2', type: 'follow', user: 'Pedro S.', text: 'começou a te seguir', time: Date.now() - 12 * 60000, link: '/profile/u2' },
-  { id: 'n3', type: 'like', user: 'Julia M.', text: 'curtiu seu post', time: Date.now() - 28 * 60000, link: '/post/p2' },
-  { id: 'n4', type: 'follow', user: 'Caio R.', text: 'começou a te seguir', time: Date.now() - 60 * 60000, link: '/profile/u4' },
-  { id: 'n5', type: 'like', user: 'Bianca T.', text: 'e mais 4 pessoas curtiram seu post', time: Date.now() - 2 * 60 * 60000, link: '/post/p1' },
-];
 
 function NotificationsDrawer({
   visible,
   onClose,
   insets,
+  notifs,
 }: {
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
+  notifs: DBNotification[];
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
   const SNAP_HALF = Math.min(380, SCREEN_H * 0.55);
@@ -372,7 +373,7 @@ function NotificationsDrawer({
   const currentH = useRef(SNAP_HALF);
   const slideAnim = useRef(new Animated.Value(400)).current;
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const notifs = useMemo(() => MOCK_NOTIFS.filter(n => !dismissed.has(n.id)), [dismissed]);
+  const visibleNotifs = useMemo(() => notifs.filter(n => !dismissed.has(n.id)), [notifs, dismissed]);
 
   useEffect(() => {
     if (visible) {
@@ -421,18 +422,25 @@ function NotificationsDrawer({
             </TouchableOpacity>
           </View>
           <FlatList
-            data={notifs}
+            data={visibleNotifs}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.notifEmpty}>
-                <Text style={styles.notifEmptyText}>Nenhuma notificação</Text>
+                <Bell color={Colors.textMuted} size={36} strokeWidth={1.8} />
+                <Text style={styles.notifEmptyText}>Nenhuma notificação ainda</Text>
               </View>
             }
             renderItem={({ item }) => {
-              const diff = Date.now() - item.time;
+              const diff = Date.now() - new Date(item.created_at).getTime();
               const mins = Math.floor(diff / 60000);
               const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
+              const actorName = item.actor?.display_name ?? item.actor?.username ?? 'Alguém';
+              const link = item.post_id
+                ? `/post/${item.post_id}`
+                : item.actor_id
+                  ? `/profile/${item.actor_id}`
+                  : null;
               return (
                 <Swipeable
                   renderRightActions={() => (
@@ -446,17 +454,14 @@ function NotificationsDrawer({
                   <TouchableOpacity
                     style={styles.drawerRow}
                     activeOpacity={0.75}
-                    onPress={() => {
-                      onClose();
-                      if (item.link) router.push(item.link as any);
-                    }}
+                    onPress={() => { onClose(); if (link) router.push(link as any); }}
                   >
                     <View style={[styles.notifIcon, { backgroundColor: item.type === 'like' ? 'rgba(255,45,120,0.15)' : 'rgba(123,47,255,0.15)' }]}>
-                      <Text style={styles.notifEmoji}>{item.type === 'like' ? '❤️' : '👤'}</Text>
+                      <Text style={styles.notifEmoji}>{item.type === 'like' ? '❤️' : item.type === 'follow' ? '👤' : item.type === 'comment' ? '💬' : '✉️'}</Text>
                     </View>
                     <View style={styles.drawerRowInfo}>
                       <Text style={styles.drawerRowName} numberOfLines={2}>
-                        <Text style={{ color: Colors.white }}>{item.user}</Text>
+                        <Text style={{ color: Colors.white }}>{actorName}</Text>
                         {' '}{item.text}
                       </Text>
                       <Text style={styles.drawerRowTime}>{timeStr}</Text>
@@ -1119,6 +1124,25 @@ const styles = StyleSheet.create({
   },
   feedContent: {
     gap: Spacing.xs,
+  },
+  feedEmpty: {
+    paddingTop: 80,
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing['2xl'],
+  },
+  feedEmptyTitle: {
+    fontFamily: FontFamily.headingMedium,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+    textAlign: 'center',
+  },
+  feedEmptySub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: FontSize.md * 1.55,
   },
   header: {
     width: '100%',
