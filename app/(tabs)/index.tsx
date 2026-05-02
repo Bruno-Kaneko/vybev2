@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, hasLiked, likePost, unlikePost, getNotifications, getChats } from '@/lib/db';
+import { getFeedPosts, hasLiked, likePost, unlikePost, getNotifications, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
@@ -250,10 +250,20 @@ function DrawerRealChatRow({ chat, myId, onClose }: { chat: DBChat; myId: string
       activeOpacity={0.8}
       onPress={() => { onClose(); router.push(`/(tabs)/chat/${otherId}` as any); }}
     >
-      <Avatar uri={other?.avatar_url ?? ''} size="md" />
+      <TouchableOpacity
+        activeOpacity={0.75}
+        onPress={() => { onClose(); router.push(`/profile/${otherId}` as any); }}
+      >
+        <Avatar uri={other?.avatar_url ?? ''} size="md" />
+      </TouchableOpacity>
       <View style={styles.drawerRowInfo}>
         <View style={styles.drawerRowTop}>
-          <Text style={[styles.drawerRowName, { color: Colors.white }]}>{other?.display_name ?? other?.username ?? 'Usuário'}</Text>
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => { onClose(); router.push(`/profile/${otherId}` as any); }}
+          >
+            <Text style={[styles.drawerRowName, { color: Colors.white }]}>{other?.display_name ?? other?.username ?? 'Usuário'}</Text>
+          </TouchableOpacity>
           <Text style={styles.drawerRowTime}>{timeStr}</Text>
         </View>
         <Text style={styles.drawerRowPreview} numberOfLines={1}>{chat.last_message ?? ''}</Text>
@@ -947,8 +957,15 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
     const next = !liked;
     setLiked(next);
     if (isRealPost && user?.id) {
-      if (next) likePost(post.id, user.id).catch(() => {});
-      else unlikePost(post.id, user.id).catch(() => {});
+      if (next) {
+        likePost(post.id, user.id).catch(() => {});
+        if (post.userId !== user.id) {
+          const actorName = user.user_metadata?.username ?? user.email?.split('@')[0] ?? 'Alguém';
+          notifyUser(post.userId, user.id, 'like', post.id, 'curtiu seu post', 'VYBE', `${actorName} curtiu seu post`);
+        }
+      } else {
+        unlikePost(post.id, user.id).catch(() => {});
+      }
     }
   };
 
@@ -965,7 +982,7 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
     setShareOpen(false);
     await NativeShare.share({
       title: 'VYBE',
-      message: `${post.user.displayName} está em ${post.placeName} no VYBE! ${post.caption ?? ''}`.trim(),
+      message: `${post.user.displayName} está em ${post.placeName} no VYBE!\n${post.caption ?? ''}\nvybe.app/post/${post.id}`.trim(),
     });
   };
 

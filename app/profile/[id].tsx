@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,19 @@ import {
   Modal,
   Alert,
   Platform,
-  ActivityIndicator,
+  RefreshControl,
+  Share as NativeShare,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AtSign, ChevronLeft, Flag, Grid3X3, MapPin, MessageCircle, MoreHorizontal, X } from 'lucide-react-native';
+import { AtSign, ChevronLeft, Flag, Grid3X3, MapPin, MessageCircle, MoreHorizontal, Share2, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
-import { Avatar, VybeButton } from '@/components/ui';
+import { Avatar, Skeleton, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser, getFollowRequestStatus, sendFollowRequest, cancelFollowRequest } from '@/lib/db';
+import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser, getFollowRequestStatus, sendFollowRequest, cancelFollowRequest, notifyUser } from '@/lib/db';
 import type { FollowRequestStatus } from '@/lib/db';
 import type { RelationshipStatus, Post, User } from '@/types';
 import { Lock } from 'lucide-react-native';
@@ -71,6 +72,7 @@ export default function ProfileScreen() {
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const isReal = UUID_RE.test(id ?? '');
   const isOwnProfile = isReal && id === authUser?.id;
@@ -81,31 +83,37 @@ export default function ProfileScreen() {
   const [requestStatus, setRequestStatus] = useState<FollowRequestStatus>('none');
   const [requestLoading, setRequestLoading] = useState(false);
 
-  useEffect(() => {
+  const loadProfile = useCallback(async (silent = false) => {
     if (!id) return;
-    let cancelled = false;
+    if (!silent) setLoadingProfile(true);
     if (isReal) {
-      Promise.all([
-        getProfile(id),
-        getUserPosts(id),
-        authUser ? isFollowing(authUser.id, id) : Promise.resolve(false),
-        authUser && id !== authUser.id ? getFollowRequestStatus(authUser.id, id) : Promise.resolve('none' as FollowRequestStatus),
-      ]).then(([p, posts, followingResult, reqStatus]) => {
-        if (cancelled) return;
+      try {
+        const [p, posts, followingResult, reqStatus] = await Promise.all([
+          getProfile(id),
+          getUserPosts(id),
+          authUser ? isFollowing(authUser.id, id) : Promise.resolve(false),
+          authUser && id !== authUser.id ? getFollowRequestStatus(authUser.id, id) : Promise.resolve('none' as FollowRequestStatus),
+        ]);
         if (p) setProfileUser(p);
         setUserPosts(posts);
         setFollowing(followingResult);
         setRequestStatus(reqStatus);
-        setLoadingProfile(false);
-      }).catch(() => { if (!cancelled) setLoadingProfile(false); });
+      } catch {}
     } else {
       const mock = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
       setProfileUser(mock);
       setUserPosts(MOCK_POSTS.filter(p => p.userId === mock.id));
-      setLoadingProfile(false);
     }
-    return () => { cancelled = true; };
-  }, [id, authUser?.id]);
+    setLoadingProfile(false);
+  }, [id, isReal, authUser?.id]);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadProfile(true);
+    setRefreshing(false);
+  }, [loadProfile]);
 
   const user = profileUser ?? MOCK_USERS[0];
 
@@ -132,15 +140,39 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (following) {
+      const name = profileUser?.displayName ?? 'este usuário';
+      Alert.alert(
+        'Deixar de seguir?',
+        `Você vai deixar de seguir ${name}.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Deixar de seguir',
+            style: 'destructive',
+            onPress: async () => {
+              setFollowLoading(true);
+              try {
+                await unfollowUser(authUser.id, id);
+                setFollowing(false);
+              } catch {
+                Alert.alert('Erro', 'Não foi possível completar a ação.');
+              } finally {
+                setFollowLoading(false);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setFollowLoading(true);
     try {
-      if (following) {
-        await unfollowUser(authUser.id, id);
-        setFollowing(false);
-      } else {
-        await followUser(authUser.id, id);
-        setFollowing(true);
-      }
+      await followUser(authUser.id, id);
+      setFollowing(true);
+      const actorName = authUser.user_metadata?.username ?? authUser.email?.split('@')[0] ?? 'Alguém';
+      notifyUser(id, authUser.id, 'follow', null, 'passou a seguir você', 'VYBE', `${actorName} passou a seguir você`);
     } catch {
       Alert.alert('Erro', 'Não foi possível completar a ação.');
     } finally {
@@ -160,10 +192,38 @@ export default function ProfileScreen() {
   const thumbGap = Spacing.xs;
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
+  const handleShare = async () => {
+    try {
+      await NativeShare.share({
+        title: 'VYBE',
+        message: `Veja o perfil de ${user.displayName} no VYBE! @${user.username}`,
+      });
+    } catch {}
+  };
+
   if (loadingProfile && isReal) {
     return (
-      <View style={[styles.root, { paddingTop: insets.top, alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator color={Colors.secondary} size="large" />
+      <View style={[styles.root, { paddingTop: insets.top }]}>
+        <View style={[styles.content, { paddingHorizontal: responsive.pagePadding, paddingTop: Spacing.md, alignItems: 'center' }]}>
+          <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth, gap: Spacing.lg }]}>
+            <View style={styles.topBar}>
+              <Skeleton width={44} height={44} borderRadius={22} />
+              <Skeleton width={44} height={44} borderRadius={22} />
+            </View>
+            <View style={{ alignItems: 'center', gap: Spacing.md }}>
+              <Skeleton width={86} height={86} borderRadius={43} />
+              <Skeleton width="50%" height={22} borderRadius={8} />
+              <Skeleton width="35%" height={14} borderRadius={6} />
+            </View>
+            <Skeleton width="100%" height={80} borderRadius={12} />
+            <Skeleton width="100%" height={48} borderRadius={24} />
+            <View style={{ flexDirection: 'row', gap: Spacing.xs }}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} width="31%" height={120} borderRadius={10} style={{ aspectRatio: 0.78 }} />
+              ))}
+            </View>
+          </View>
+        </View>
       </View>
     );
   }
@@ -180,15 +240,30 @@ export default function ProfileScreen() {
         },
       ]}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        isReal ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.secondary}
+            colors={[Colors.secondary]}
+          />
+        ) : undefined
+      }
     >
       <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={22} strokeWidth={2.4} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { setReportSent(false); setReportOpen(true); }} style={styles.moreBtn}>
-            <MoreHorizontal color={Colors.textMuted} size={20} strokeWidth={2.2} />
-          </TouchableOpacity>
+          <View style={styles.topBarRight}>
+            <TouchableOpacity onPress={handleShare} style={styles.moreBtn}>
+              <Share2 color={Colors.textMuted} size={18} strokeWidth={2.2} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setReportSent(false); setReportOpen(true); }} style={styles.moreBtn}>
+              <MoreHorizontal color={Colors.textMuted} size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.hero}>
@@ -362,6 +437,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   backBtn: {
     width: 44,

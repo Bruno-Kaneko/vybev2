@@ -5,7 +5,8 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
+  Alert,
+  RefreshControl,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +14,7 @@ import { ChevronLeft, UserCheck } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { getFollowers, getFollowing, getFollowingIds, followUser, unfollowUser } from '@/lib/db';
 import type { DBUserResult } from '@/lib/db';
-import { Avatar } from '@/components/ui';
+import { Avatar, Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 
@@ -25,6 +26,7 @@ export default function FollowersScreen() {
   const isFollowers = type !== 'following';
   const [users, setUsers] = useState<DBUserResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [loadingFollow, setLoadingFollow] = useState<Set<string>>(new Set());
 
@@ -46,17 +48,43 @@ export default function FollowersScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleFollow = async (targetId: string) => {
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  const handleFollow = async (targetId: string, targetName: string) => {
     if (!authUser || targetId === authUser.id) return;
+
+    if (followingIds.has(targetId)) {
+      Alert.alert(
+        'Deixar de seguir?',
+        `Você vai deixar de seguir ${targetName}.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Deixar de seguir',
+            style: 'destructive',
+            onPress: async () => {
+              setLoadingFollow(prev => new Set([...prev, targetId]));
+              try {
+                await unfollowUser(authUser.id, targetId);
+                setFollowingIds(prev => { const s = new Set(prev); s.delete(targetId); return s; });
+              } catch {} finally {
+                setLoadingFollow(prev => { const s = new Set(prev); s.delete(targetId); return s; });
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setLoadingFollow(prev => new Set([...prev, targetId]));
     try {
-      if (followingIds.has(targetId)) {
-        await unfollowUser(authUser.id, targetId);
-        setFollowingIds(prev => { const s = new Set(prev); s.delete(targetId); return s; });
-      } else {
-        await followUser(authUser.id, targetId);
-        setFollowingIds(prev => new Set([...prev, targetId]));
-      }
+      await followUser(authUser.id, targetId);
+      setFollowingIds(prev => new Set([...prev, targetId]));
     } catch {} finally {
       setLoadingFollow(prev => { const s = new Set(prev); s.delete(targetId); return s; });
     }
@@ -73,14 +101,30 @@ export default function FollowersScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={Colors.secondary} size="large" />
+        <View style={[styles.skeletonList, { paddingHorizontal: responsive.pagePadding }]}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton width={46} height={46} borderRadius={23} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <Skeleton width="55%" height={13} borderRadius={6} />
+              </View>
+              <Skeleton width={80} height={32} borderRadius={16} />
+            </View>
+          ))}
         </View>
       ) : (
         <FlatList
           data={users}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.secondary}
+              colors={[Colors.secondary]}
+            />
+          }
           contentContainerStyle={[
             styles.listContent,
             { paddingHorizontal: responsive.pagePadding, paddingBottom: insets.bottom + 40 },
@@ -97,6 +141,10 @@ export default function FollowersScreen() {
             const isMe = item.id === authUser?.id;
             const following = followingIds.has(item.id);
             const busy = loadingFollow.has(item.id);
+            const hasRealName = item.display_name && item.display_name !== item.username;
+            const displayLabel = hasRealName ? item.display_name! : `@${item.username}`;
+            const showHandle = hasRealName;
+
             return (
               <TouchableOpacity
                 style={styles.row}
@@ -105,23 +153,21 @@ export default function FollowersScreen() {
               >
                 <Avatar uri={item.avatar_url ?? ''} size="md" />
                 <View style={styles.info}>
-                  <Text style={styles.name} numberOfLines={1}>{item.display_name ?? item.username}</Text>
-                  <Text style={styles.handle} numberOfLines={1}>@{item.username}</Text>
+                  <Text style={styles.name} numberOfLines={1}>{displayLabel}</Text>
+                  {showHandle && (
+                    <Text style={styles.handle} numberOfLines={1}>@{item.username}</Text>
+                  )}
                 </View>
                 {!isMe && (
                   <TouchableOpacity
                     style={[styles.followBtn, following && styles.followBtnOutline]}
-                    onPress={() => handleFollow(item.id)}
+                    onPress={() => handleFollow(item.id, displayLabel)}
                     disabled={busy}
                     activeOpacity={0.8}
                   >
-                    {busy ? (
-                      <ActivityIndicator color={following ? Colors.white : Colors.secondary} size="small" />
-                    ) : (
-                      <Text style={[styles.followBtnText, following && styles.followBtnTextOutline]}>
-                        {following ? 'Seguindo' : 'Seguir'}
-                      </Text>
-                    )}
+                    <Text style={[styles.followBtnText, following && styles.followBtnTextOutline]}>
+                      {busy ? '...' : following ? 'Seguindo' : 'Seguir'}
+                    </Text>
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
@@ -158,10 +204,17 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xl,
     color: Colors.white,
   },
-  center: {
-    flex: 1,
+  skeletonList: {
+    paddingTop: Spacing.md,
+    gap: 0,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   listContent: {
     width: '100%',

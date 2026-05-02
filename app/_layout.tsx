@@ -70,6 +70,7 @@ function RootNavigator() {
         <Stack.Screen name="profile/[id]" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
         <Stack.Screen name="place/[id]" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
         <Stack.Screen name="post/[id]" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
+        <Stack.Screen name="followers/[id]" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
         <Stack.Screen name="preferences" options={{ animation: 'slide_from_right', animationDuration: 260, gestureEnabled: true }} />
       </Stack>
       {!ready && !hasNavigated && (

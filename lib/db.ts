@@ -580,3 +580,57 @@ export async function getFollowingIds(userId: string): Promise<Set<string>> {
     .limit(1000);
   return new Set((data ?? []).map((r: any) => r.following_id as string));
 }
+
+// ────────────────────────────────────────────────
+// PUSH NOTIFICATIONS
+// ────────────────────────────────────────────────
+
+export async function getPushTokens(userId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from('push_tokens')
+    .select('token')
+    .eq('user_id', userId);
+  return (data ?? []).map((r: any) => r.token as string).filter(Boolean);
+}
+
+export async function createNotification(
+  userId: string,
+  actorId: string,
+  type: 'like' | 'follow' | 'comment' | 'message',
+  postId: string | null,
+  text: string
+) {
+  await supabase.from('notifications').insert({
+    user_id: userId,
+    actor_id: actorId,
+    type,
+    post_id: postId,
+    text,
+    read: false,
+  });
+}
+
+export async function notifyUser(
+  recipientId: string,
+  actorId: string,
+  type: 'like' | 'follow' | 'comment' | 'message',
+  postId: string | null,
+  text: string,
+  pushTitle: string,
+  pushBody: string
+) {
+  try {
+    await createNotification(recipientId, actorId, type, postId, text);
+    const tokens = await getPushTokens(recipientId);
+    if (!tokens.length) return;
+    const messages = tokens
+      .filter(t => t.startsWith('ExponentPushToken'))
+      .map(token => ({ to: token, title: pushTitle, body: pushBody, sound: 'default', data: { type, postId, userId: actorId } }));
+    if (!messages.length) return;
+    fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(messages),
+    }).catch(() => {});
+  } catch {}
+}

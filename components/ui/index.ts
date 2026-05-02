@@ -5,3 +5,4 @@ export { Badge } from './Badge';
 export { GradientText } from './GradientText';
 export { VybeTabBar } from './TabBar';
 export { BrandLogo } from './BrandLogo';
+export { Skeleton } from './Skeleton';
