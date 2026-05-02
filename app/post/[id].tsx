@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
   KeyboardAvoidingView, Platform, Share as NativeShare, ScrollView,
-  Animated, ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,10 +10,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, ChevronLeft, Heart, MapPin, MessageCircle, Send } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_POSTS } from '@/constants/MockData';
-import { Avatar, PostTimer } from '@/components/ui';
+import { Avatar, PostTimer, Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getPost, getComments, addComment, hasLiked, likePost, unlikePost } from '@/lib/db';
+import { getPost, getComments, addComment, hasLiked, likePost, unlikePost, notifyUser } from '@/lib/db';
 import type { DBComment } from '@/lib/db';
 import type { Post } from '@/types';
 
@@ -83,9 +83,11 @@ export default function PostDetailScreen() {
         await addComment(id, user.id, text);
         const updated = await getComments(id);
         setComments(updated);
-      } catch {
-        // silently ignore
-      } finally {
+        if (post && post.userId !== user.id) {
+          const actorName = user.user_metadata?.username ?? user.email?.split('@')[0] ?? 'Alguém';
+          notifyUser(post.userId, user.id, 'comment', id, 'comentou no seu post', 'VYBE', `${actorName} comentou: ${text.slice(0, 60)}`);
+        }
+      } catch {} finally {
         setSending(false);
       }
     } else {
@@ -115,8 +117,27 @@ export default function PostDetailScreen() {
 
   if (loading || !post) {
     return (
-      <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={Colors.secondary} size="large" />
+      <View style={[styles.root, { paddingTop: insets.top }]}>
+        <View style={[styles.shell, { maxWidth: responsive.feedMaxWidth }]}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <ChevronLeft color={Colors.white} size={24} strokeWidth={2.4} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Post</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <Skeleton width="100%" height={380} borderRadius={0} />
+          <View style={{ padding: Spacing.lg, gap: Spacing.md }}>
+            <View style={{ flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' }}>
+              <Skeleton width={40} height={40} borderRadius={20} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <Skeleton width="45%" height={13} borderRadius={6} />
+                <Skeleton width="30%" height={11} borderRadius={5} />
+              </View>
+            </View>
+            <Skeleton width="80%" height={14} borderRadius={6} />
+          </View>
+        </View>
       </View>
     );
   }
@@ -244,10 +265,7 @@ export default function PostDetailScreen() {
               style={[styles.commentSendBtn, (!commentText.trim() || sending) && { opacity: 0.4 }]}
               disabled={!commentText.trim() || sending}
             >
-              {sending
-                ? <ActivityIndicator color={Colors.white} size="small" />
-                : <ArrowUp color={Colors.white} size={16} strokeWidth={2.5} />
-              }
+              <ArrowUp color={Colors.white} size={16} strokeWidth={2.5} style={sending ? { opacity: 0.5 } : undefined} />
             </TouchableOpacity>
           </View>
         </Animated.View>

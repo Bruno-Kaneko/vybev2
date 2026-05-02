@@ -25,6 +25,7 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
 import { getFeedPosts, hasLiked, likePost, unlikePost, getNotifications, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -98,6 +99,14 @@ export default function HomeScreen() {
     if (!authUserHome) return;
     getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
     getChats(authUserHome.id).then(setRealChats).catch(() => {});
+
+    const ch = supabase
+      .channel(`home-notifs-${authUserHome.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${authUserHome.id}` }, () => {
+        getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, [authUserHome?.id]);
 
   const handleJoin = (g: { id: string; name: string; closesAtTs: number }) => {
@@ -939,6 +948,7 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
   const [liked, setLiked] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
+  const [shareChats, setShareChats] = useState<DBChat[]>([]);
   const likeScale = useState(new Animated.Value(1))[0];
   const sendScale = useState(new Animated.Value(1))[0];
   const isRealPost = UUID_RE_FEED.test(post.id);
@@ -976,6 +986,11 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
       Animated.spring(sendScale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 280 } as any),
     ]).start();
     setShareOpen(true);
+    if (user?.id) {
+      import('@/lib/db').then(({ getChats }) => {
+        getChats(user.id).then(setShareChats).catch(() => {});
+      });
+    }
   };
 
   const handleExternalShare = async () => {
@@ -1085,25 +1100,32 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
           <Text style={styles.shareTitle}>Encaminhar</Text>
 
           <FlatList
-            data={MOCK_CHATS}
+            data={shareChats}
             keyExtractor={c => c.id}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.shareContacts}
+            ListEmptyComponent={
+              <Text style={[styles.shareContactName, { color: Colors.textMuted, width: 200, textAlign: 'center', alignSelf: 'center' }]}>
+                Nenhuma conversa ainda
+              </Text>
+            }
             renderItem={({ item }) => {
-              const other = item.participants[0];
+              const iAmA = user?.id === item.participant_a;
+              const other = iAmA ? item.profile_b : item.profile_a;
               const selected = sentTo.has(item.id);
+              const name = (other?.display_name ?? other?.username ?? 'Usuário').split(' ')[0];
               return (
                 <TouchableOpacity style={styles.shareContact} onPress={() => toggleSend(item.id)} activeOpacity={0.8}>
                   <View style={[styles.shareAvatarWrap, selected && styles.shareAvatarSelected]}>
-                    <Avatar uri={other.avatar} size="md" />
+                    <Avatar uri={other?.avatar_url ?? ''} size="md" />
                     {selected && (
                       <View style={styles.shareCheckBadge}>
                         <Check color={Colors.white} size={11} strokeWidth={3} />
                       </View>
                     )}
                   </View>
-                  <Text style={styles.shareContactName} numberOfLines={1}>{other.displayName.split(' ')[0]}</Text>
+                  <Text style={styles.shareContactName} numberOfLines={1}>{name}</Text>
                 </TouchableOpacity>
               );
             }}

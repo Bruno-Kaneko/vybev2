@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircle } from 'lucide-react-native';
@@ -10,6 +10,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { getChats } from '@/lib/db';
 import type { DBChat } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 type RowItem = {
   id: string;
@@ -41,6 +42,8 @@ export default function ChatListScreen() {
   const responsive = useResponsive();
   const { user } = useAuth();
   const [rows, setRows] = useState<RowItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -54,12 +57,41 @@ export default function ChatListScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  // Real-time: reload chat list whenever any of the user's chats update
+  useEffect(() => {
+    if (!user?.id) return;
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+    const ch = supabase
+      .channel(`chats-list-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chats', filter: `participant_a=eq.${user.id}` }, () => { load(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chats', filter: `participant_b=eq.${user.id}` }, () => { load(); })
+      .subscribe();
+    channelRef.current = ch;
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id, load]);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <FlatList
         data={rows}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.secondary}
+            colors={[Colors.secondary]}
+          />
+        }
         contentContainerStyle={[
           styles.listContent,
           { paddingHorizontal: responsive.pagePadding, paddingBottom: insets.bottom + 110 },
