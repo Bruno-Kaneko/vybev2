@@ -16,19 +16,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        // Refresh token inválido ou expirado — limpa sessão e força novo login
+        supabase.auth.signOut().catch(() => {});
+        setSession(null);
+      } else {
+        setSession(session);
+      }
+      setLoading(false);
+    }).catch(() => {
+      supabase.auth.signOut().catch(() => {});
+      setSession(null);
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        ensureProfile(
-          session.user.id,
-          session.user.email ?? '',
-          session.user.user_metadata?.username
-        ).catch(() => {});
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+        setSession(session);
+        if (session?.user) {
+          ensureProfile(
+            session.user.id,
+            session.user.email ?? '',
+            session.user.user_metadata?.username
+          ).catch(() => {});
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
+      } else {
+        setSession(session);
       }
     });
 
