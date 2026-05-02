@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, LogBox } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Suppress known Supabase internal token-refresh errors — handled gracefully in AuthContext
+LogBox.ignoreLogs([
+  'AuthApiError: Invalid Refresh Token',
+  '[AuthApiError',
+]);
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

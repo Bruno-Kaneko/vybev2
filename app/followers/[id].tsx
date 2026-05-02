@@ -11,32 +11,56 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, UserCheck } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { getFollowers, getFollowing } from '@/lib/db';
+import { getFollowers, getFollowing, getFollowingIds, followUser, unfollowUser } from '@/lib/db';
 import type { DBUserResult } from '@/lib/db';
 import { Avatar } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAuth } from '@/context/AuthContext';
 
 export default function FollowersScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user: authUser } = useAuth();
   const isFollowers = type !== 'following';
   const [users, setUsers] = useState<DBUserResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [loadingFollow, setLoadingFollow] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const list = isFollowers ? await getFollowers(id) : await getFollowing(id);
+      const [list, ids] = await Promise.all([
+        isFollowers ? getFollowers(id) : getFollowing(id),
+        authUser ? getFollowingIds(authUser.id) : Promise.resolve(new Set<string>()),
+      ]);
       setUsers(list);
+      setFollowingIds(ids);
     } catch {
       setUsers([]);
     } finally {
       setLoading(false);
     }
-  }, [id, isFollowers]);
+  }, [id, isFollowers, authUser?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleFollow = async (targetId: string) => {
+    if (!authUser || targetId === authUser.id) return;
+    setLoadingFollow(prev => new Set([...prev, targetId]));
+    try {
+      if (followingIds.has(targetId)) {
+        await unfollowUser(authUser.id, targetId);
+        setFollowingIds(prev => { const s = new Set(prev); s.delete(targetId); return s; });
+      } else {
+        await followUser(authUser.id, targetId);
+        setFollowingIds(prev => new Set([...prev, targetId]));
+      }
+    } catch {} finally {
+      setLoadingFollow(prev => { const s = new Set(prev); s.delete(targetId); return s; });
+    }
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -69,27 +93,40 @@ export default function FollowersScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.8}
-              onPress={() => router.push(`/profile/${item.id}`)}
-            >
-              <Avatar uri={item.avatar_url ?? ''} size="md" />
-              <View style={styles.info}>
-                <Text style={styles.name}>{item.display_name ?? item.username}</Text>
-                <Text style={styles.handle}>@{item.username}</Text>
-              </View>
-              <View style={styles.followersCount}>
-                <Text style={styles.followersNum}>
-                  {item.follower_count >= 1000
-                    ? `${(item.follower_count / 1000).toFixed(1)}k`
-                    : item.follower_count}
-                </Text>
-                <Text style={styles.followersLabel}>seguidores</Text>
-              </View>
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const isMe = item.id === authUser?.id;
+            const following = followingIds.has(item.id);
+            const busy = loadingFollow.has(item.id);
+            return (
+              <TouchableOpacity
+                style={styles.row}
+                activeOpacity={0.8}
+                onPress={() => router.push(`/profile/${item.id}`)}
+              >
+                <Avatar uri={item.avatar_url ?? ''} size="md" />
+                <View style={styles.info}>
+                  <Text style={styles.name} numberOfLines={1}>{item.display_name ?? item.username}</Text>
+                  <Text style={styles.handle} numberOfLines={1}>@{item.username}</Text>
+                </View>
+                {!isMe && (
+                  <TouchableOpacity
+                    style={[styles.followBtn, following && styles.followBtnOutline]}
+                    onPress={() => handleFollow(item.id)}
+                    disabled={busy}
+                    activeOpacity={0.8}
+                  >
+                    {busy ? (
+                      <ActivityIndicator color={following ? Colors.white : Colors.secondary} size="small" />
+                    ) : (
+                      <Text style={[styles.followBtnText, following && styles.followBtnTextOutline]}>
+                        {following ? 'Seguindo' : 'Seguir'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
     </View>
@@ -108,7 +145,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   backBtn: {
     width: 44,
@@ -152,21 +189,28 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
   },
-  followersCount: {
-    alignItems: 'flex-end',
-    gap: 1,
+  followBtn: {
+    height: 34,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 86,
+    flexShrink: 0,
   },
-  followersNum: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.md,
+  followBtnOutline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  followBtnText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.sm,
     color: Colors.white,
   },
-  followersLabel: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
+  followBtnTextOutline: {
     color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
   },
   empty: {
     paddingTop: 80,

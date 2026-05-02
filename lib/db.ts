@@ -571,3 +571,12 @@ export async function getFollowing(userId: string): Promise<DBUserResult[]> {
   if (!data) return [];
   return (data as any[]).map((row: any) => row.following).filter(Boolean) as DBUserResult[];
 }
+
+export async function getFollowingIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', userId)
+    .limit(1000);
+  return new Set((data ?? []).map((r: any) => r.following_id as string));
+}

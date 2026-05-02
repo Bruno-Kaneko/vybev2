@@ -1,7 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { ensureProfile, updateLastSeen } from '@/lib/db';
+
+async function clearStaleTokens() {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const authKeys = keys.filter(k => k.includes('supabase') || k.includes('sb-'));
+    if (authKeys.length) await AsyncStorage.multiRemove(authKeys);
+  } catch {}
+}
 
 type AuthContextType = {
   session: Session | null;
@@ -18,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
-        // Refresh token inválido ou expirado — limpa sessão e força novo login
+        clearStaleTokens();
         supabase.auth.signOut().catch(() => {});
         setSession(null);
       } else {
@@ -26,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setLoading(false);
     }).catch(() => {
+      clearStaleTokens();
       supabase.auth.signOut().catch(() => {});
       setSession(null);
       setLoading(false);
