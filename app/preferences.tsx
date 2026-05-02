@@ -35,6 +35,7 @@ import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { setProfilePrivacy } from '@/lib/db';
 import { VybeButton } from '@/components/ui';
 
 type Prefs = {
@@ -86,6 +87,9 @@ export default function PreferencesScreen() {
     debounceRef.current = setTimeout(async () => {
       try {
         await supabase.auth.updateUser({ data: { preferences: next } });
+        if (key === 'privateProfile' && user?.id) {
+          await setProfilePrivacy(user.id, value);
+        }
         setSaveState('saved');
         setTimeout(() => setSaveState('idle'), 1800);
       } catch {

@@ -16,6 +16,7 @@ export type DBProfile = {
   relationship_status: string | null;
   follower_count: number;
   following_count: number;
+  is_private: boolean;
   created_at: string;
 };
 
@@ -74,6 +75,7 @@ export function mapProfile(p: DBProfile): User {
     following: p.following_count,
     createdAt: new Date(p.created_at).getTime(),
     relationshipStatus: (p.relationship_status as any) ?? undefined,
+    isPrivate: p.is_private ?? false,
   };
 }
 
@@ -300,10 +302,12 @@ export async function sendMessage(
   chatId: string,
   senderId: string,
   text: string
-) {
-  const { error } = await supabase
+): Promise<{ id: string; created_at: string }> {
+  const { data, error } = await supabase
     .from('messages')
-    .insert({ chat_id: chatId, sender_id: senderId, text });
+    .insert({ chat_id: chatId, sender_id: senderId, text })
+    .select('id, created_at')
+    .single();
   if (error) throw error;
   await supabase
     .from('chats')
@@ -312,6 +316,7 @@ export async function sendMessage(
       last_message_at: new Date().toISOString(),
     })
     .eq('id', chatId);
+  return { id: data.id as string, created_at: data.created_at as string };
 }
 
 // ────────────────────────────────────────────────
@@ -423,6 +428,49 @@ export async function getChatCreatedAt(chatId: string): Promise<number> {
     .eq('id', chatId)
     .single();
   return data ? new Date(data.created_at).getTime() : Date.now();
+}
+
+// ────────────────────────────────────────────────
+// FOLLOW REQUESTS
+// ────────────────────────────────────────────────
+
+export type FollowRequestStatus = 'none' | 'pending' | 'following';
+
+export async function getFollowRequestStatus(
+  requesterId: string,
+  targetId: string
+): Promise<FollowRequestStatus> {
+  const [{ data: followData }, { data: reqData }] = await Promise.all([
+    supabase.from('follows').select('follower_id').eq('follower_id', requesterId).eq('following_id', targetId).maybeSingle(),
+    supabase.from('follow_requests').select('id').eq('requester_id', requesterId).eq('target_id', targetId).maybeSingle(),
+  ]);
+  if (followData) return 'following';
+  if (reqData) return 'pending';
+  return 'none';
+}
+
+export async function sendFollowRequest(requesterId: string, targetId: string): Promise<void> {
+  await supabase.from('follow_requests').upsert(
+    { requester_id: requesterId, target_id: targetId },
+    { onConflict: 'requester_id,target_id', ignoreDuplicates: true }
+  );
+}
+
+export async function cancelFollowRequest(requesterId: string, targetId: string): Promise<void> {
+  await supabase.from('follow_requests').delete().eq('requester_id', requesterId).eq('target_id', targetId);
+}
+
+export async function acceptFollowRequest(requesterId: string, targetId: string): Promise<void> {
+  await supabase.from('follows').insert({ follower_id: requesterId, following_id: targetId });
+  await supabase.from('follow_requests').delete().eq('requester_id', requesterId).eq('target_id', targetId);
+}
+
+export async function rejectFollowRequest(requesterId: string, targetId: string): Promise<void> {
+  await supabase.from('follow_requests').delete().eq('requester_id', requesterId).eq('target_id', targetId);
+}
+
+export async function setProfilePrivacy(userId: string, isPrivate: boolean): Promise<void> {
+  await supabase.from('profiles').update({ is_private: isPrivate }).eq('id', userId);
 }
 
 // ────────────────────────────────────────────────

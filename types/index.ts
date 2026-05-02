@@ -12,6 +12,7 @@ export interface User {
   following: number;
   createdAt: number;
   relationshipStatus?: RelationshipStatus;
+  isPrivate?: boolean;
 }
 
 export interface Post {

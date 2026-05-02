@@ -21,8 +21,10 @@ import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser } from '@/lib/db';
+import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser, getFollowRequestStatus, sendFollowRequest, cancelFollowRequest } from '@/lib/db';
+import type { FollowRequestStatus } from '@/lib/db';
 import type { RelationshipStatus, Post, User } from '@/types';
+import { Lock } from 'lucide-react-native';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,6 +73,9 @@ export default function ProfileScreen() {
   const [loadingProfile, setLoadingProfile] = useState(true);
 
   const isReal = UUID_RE.test(id ?? '');
+  const isOwnProfile = isReal && id === authUser?.id;
+  const [requestStatus, setRequestStatus] = useState<FollowRequestStatus>('none');
+  const [requestLoading, setRequestLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -80,11 +85,13 @@ export default function ProfileScreen() {
         getProfile(id),
         getUserPosts(id),
         authUser ? isFollowing(authUser.id, id) : Promise.resolve(false),
-      ]).then(([p, posts, following]) => {
+        authUser && id !== authUser.id ? getFollowRequestStatus(authUser.id, id) : Promise.resolve('none' as FollowRequestStatus),
+      ]).then(([p, posts, followingResult, reqStatus]) => {
         if (cancelled) return;
         if (p) setProfileUser(p);
         setUserPosts(posts);
-        setFollowing(following);
+        setFollowing(followingResult);
+        setRequestStatus(reqStatus);
         setLoadingProfile(false);
       }).catch(() => { if (!cancelled) setLoadingProfile(false); });
     } else {
@@ -101,6 +108,26 @@ export default function ProfileScreen() {
   const handleFollow = async () => {
     if (!authUser || !id) return;
     if (!isReal) { setFollowing(f => !f); return; }
+
+    const targetPrivate = profileUser?.isPrivate ?? false;
+    if (targetPrivate && !following) {
+      setRequestLoading(true);
+      try {
+        if (requestStatus === 'pending') {
+          await cancelFollowRequest(authUser.id, id);
+          setRequestStatus('none');
+        } else {
+          await sendFollowRequest(authUser.id, id);
+          setRequestStatus('pending');
+        }
+      } catch {
+        Alert.alert('Erro', 'Não foi possível completar a ação.');
+      } finally {
+        setRequestLoading(false);
+      }
+      return;
+    }
+
     setFollowLoading(true);
     try {
       if (following) {
@@ -115,6 +142,15 @@ export default function ProfileScreen() {
     } finally {
       setFollowLoading(false);
     }
+  };
+
+  const followButtonLabel = () => {
+    if (following) return 'Seguindo ✓';
+    if (profileUser?.isPrivate) {
+      if (requestStatus === 'pending') return 'Solicitado';
+      return 'Solicitar';
+    }
+    return 'Seguir';
   };
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
   const thumbGap = Spacing.xs;
@@ -185,48 +221,58 @@ export default function ProfileScreen() {
           <StatItem label="Pontos" value={user.points} highlight />
         </View>
 
-        <View style={styles.actionsRow}>
-          <VybeButton
-            label={following ? 'Seguindo ✓' : 'Seguir'}
-            onPress={handleFollow}
-            loading={followLoading}
-            variant={following ? 'outline' : 'primary'}
-            style={{ flex: 1 }}
-          />
-          <TouchableOpacity
-            onPress={() => router.push(`/(tabs)/chat/${user.id}`)}
-            style={styles.msgBtn}
-          >
-            <MessageCircle color={Colors.text} size={19} strokeWidth={2.2} />
-            <Text style={styles.msgBtnText}>Mensagem</Text>
-          </TouchableOpacity>
-        </View>
+        {!isOwnProfile && (
+          <View style={styles.actionsRow}>
+            <VybeButton
+              label={followButtonLabel()}
+              onPress={handleFollow}
+              loading={followLoading || requestLoading}
+              variant={following || requestStatus === 'pending' ? 'outline' : 'primary'}
+              style={{ flex: 1 }}
+            />
+            <TouchableOpacity
+              onPress={() => router.push(`/(tabs)/chat/${user.id}`)}
+              style={styles.msgBtn}
+            >
+              <MessageCircle color={Colors.text} size={19} strokeWidth={2.2} />
+              <Text style={styles.msgBtnText}>Mensagem</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.postsSection}>
           <View style={styles.postsHeader}>
             <Grid3X3 color={Colors.white} size={18} strokeWidth={2.2} />
             <Text style={styles.sectionTitle}>Posts</Text>
           </View>
-          <View style={[styles.postsGrid, { gap: thumbGap }]}>
-            {userPosts.map(post => (
-              <TouchableOpacity
-                key={post.id}
-                style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}
-                onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
-                activeOpacity={0.85}
-              >
-                <Image source={{ uri: post.imageUrl }} style={styles.postThumbImg} resizeMode="cover" />
-                <LinearGradient
-                  colors={['transparent', 'rgba(10,10,15,0.7)']}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={styles.thumbMeta}>
-                  <MapPin color={Colors.textMuted} size={11} strokeWidth={2.2} />
-                  <Text style={styles.postThumbTimer} numberOfLines={1}>{post.placeName}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {profileUser?.isPrivate && !following && !isOwnProfile ? (
+            <View style={styles.privateBox}>
+              <Lock color={Colors.textMuted} size={36} strokeWidth={1.5} />
+              <Text style={styles.privateTitle}>Perfil privado</Text>
+              <Text style={styles.privateSub}>Siga este perfil para ver os posts.</Text>
+            </View>
+          ) : (
+            <View style={[styles.postsGrid, { gap: thumbGap }]}>
+              {userPosts.map(post => (
+                <TouchableOpacity
+                  key={post.id}
+                  style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}
+                  onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+                  activeOpacity={0.85}
+                >
+                  <Image source={{ uri: post.imageUrl }} style={styles.postThumbImg} resizeMode="cover" />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(10,10,15,0.7)']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.thumbMeta}>
+                    <MapPin color={Colors.textMuted} size={11} strokeWidth={2.2} />
+                    <Text style={styles.postThumbTimer} numberOfLines={1}>{post.placeName}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </View>
     </ScrollView>
@@ -454,6 +500,22 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: 9,
     color: Colors.textMuted,
+  },
+  privateBox: {
+    paddingVertical: Spacing['4xl'],
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  privateTitle: {
+    fontFamily: FontFamily.headingMedium,
+    fontSize: FontSize.lg,
+    color: Colors.white,
+  },
+  privateSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
   },
 });
 

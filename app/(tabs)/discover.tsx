@@ -38,6 +38,8 @@ import PlaceMap from '@/components/ui/PlaceMap';
 import { getActivePostLocations, searchPostsByPlace, searchUsers } from '@/lib/db';
 import type { DBUserResult } from '@/lib/db';
 import type { Place } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Category = 'Todos' | 'Balada' | 'Bar' | 'Evento' | 'Lounge';
 type ViewMode = 'list' | 'map';
@@ -54,6 +56,7 @@ const CATEGORIES: Array<{ label: Category; Icon: LucideIcon }> = [
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user: authUser } = useAuth();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('Todos');
   const [priceFilter, setPriceFilter] = useState<number | null>(null);
@@ -66,7 +69,23 @@ export default function DiscoverScreen() {
   const [realResults, setRealResults] = useState<Array<{ place_name: string; lat: number; lng: number; count: number }>>([]);
   const [searchMode, setSearchMode] = useState<SearchMode>('lugares');
   const [userResults, setUserResults] = useState<DBUserResult[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('recentUserSearches').then(v => {
+      if (v) setRecentSearches(JSON.parse(v));
+    }).catch(() => {});
+  }, []);
+
+  const saveRecentSearch = useCallback((query: string) => {
+    if (!query) return;
+    setRecentSearches(prev => {
+      const next = [query, ...prev.filter(s => s !== query)].slice(0, 8);
+      AsyncStorage.setItem('recentUserSearches', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     getActivePostLocations()
@@ -78,8 +97,11 @@ export default function DiscoverScreen() {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (!search.trim()) { setRealResults([]); setUserResults([]); return; }
     if (searchMode === 'pessoas') {
+      const query = search.trim().replace(/^@/, '');
       searchTimeout.current = setTimeout(() => {
-        searchUsers(search.trim()).then(setUserResults).catch(() => {});
+        searchUsers(query)
+          .then(results => setUserResults(results.filter(u => u.id !== authUser?.id)))
+          .catch(() => {});
       }, 350);
     } else {
       searchTimeout.current = setTimeout(() => {
@@ -87,7 +109,7 @@ export default function DiscoverScreen() {
       }, 350);
     }
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
-  }, [search, searchMode]);
+  }, [search, searchMode, authUser?.id]);
 
   const filtered = useMemo(() => {
     return MOCK_PLACES.filter(p => {
@@ -209,6 +231,8 @@ export default function DiscoverScreen() {
             searchMode={searchMode}
             setSearchMode={setSearchMode}
             userResults={userResults}
+            recentSearches={recentSearches}
+            onUserPress={(userId, query) => { saveRecentSearch(query); router.push(`/profile/${userId}`); }}
           />
         }
         ListEmptyComponent={
@@ -247,6 +271,8 @@ function DiscoverHeader({
   searchMode,
   setSearchMode,
   userResults,
+  recentSearches,
+  onUserPress,
 }: {
   search: string;
   setSearch: (value: string) => void;
@@ -264,6 +290,8 @@ function DiscoverHeader({
   searchMode: SearchMode;
   setSearchMode: (m: SearchMode) => void;
   userResults: DBUserResult[];
+  recentSearches: string[];
+  onUserPress: (userId: string, query: string) => void;
 }) {
   return (
     <View style={[styles.headerShell, { maxWidth }]}>
@@ -329,7 +357,7 @@ function DiscoverHeader({
             <TouchableOpacity
               key={u.id}
               style={styles.userRow}
-              onPress={() => router.push(`/profile/${u.id}`)}
+              onPress={() => onUserPress(u.id, search.trim().replace(/^@/, ''))}
               activeOpacity={0.8}
             >
               <View style={styles.userAvatar}>
@@ -354,10 +382,29 @@ function DiscoverHeader({
       )}
 
       {searchMode === 'pessoas' && !search.trim() && (
-        <View style={styles.pessoasHint}>
-          <Users color={Colors.textMuted} size={32} strokeWidth={1.8} />
-          <Text style={styles.pessoasHintText}>Busque por nome ou @username</Text>
-        </View>
+        <>
+          {recentSearches.length > 0 ? (
+            <View style={styles.recentSection}>
+              <Text style={styles.recentLabel}>Buscas recentes</Text>
+              {recentSearches.map(q => (
+                <TouchableOpacity
+                  key={q}
+                  style={styles.recentRow}
+                  onPress={() => setSearch(q)}
+                  activeOpacity={0.75}
+                >
+                  <Search color={Colors.textMuted} size={15} strokeWidth={2} />
+                  <Text style={styles.recentText}>{q}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.pessoasHint}>
+              <Users color={Colors.textMuted} size={32} strokeWidth={1.8} />
+              <Text style={styles.pessoasHintText}>Busque por nome ou @username</Text>
+            </View>
+          )}
+        </>
       )}
 
       {searchMode === 'lugares' && <>
@@ -610,6 +657,31 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textMuted,
+  },
+  recentSection: {
+    gap: 2,
+    marginBottom: Spacing.md,
+  },
+  recentLabel: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.xs,
+  },
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  recentText: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.text,
   },
   mapRoot: {
     position: 'relative' as any,

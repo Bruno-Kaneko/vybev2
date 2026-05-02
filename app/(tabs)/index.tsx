@@ -69,6 +69,7 @@ export default function HomeScreen() {
   const [activePosts, setActivePosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [notifs, setNotifs] = useState<DBNotification[]>([]);
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
   const [realChats, setRealChats] = useState<DBChat[]>([]);
 
   const loadFeed = useCallback(async () => {
@@ -134,7 +135,7 @@ export default function HomeScreen() {
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
             onNotifPress={() => setNotifOpen(true)}
-            notifCount={notifs.filter(n => !n.read).length}
+            notifCount={notifs.filter(n => !n.read && !dismissedNotifIds.has(n.id)).length}
           />
         }
         renderItem={({ item }) => (
@@ -160,6 +161,8 @@ export default function HomeScreen() {
         onClose={() => setNotifOpen(false)}
         insets={insets}
         notifs={notifs}
+        dismissedIds={dismissedNotifIds}
+        onDismiss={(id) => setDismissedNotifIds(prev => new Set([...prev, id]))}
       />
       <GrupoesDrawer
         visible={grupoesOpen}
@@ -361,19 +364,22 @@ function NotificationsDrawer({
   onClose,
   insets,
   notifs,
+  dismissedIds,
+  onDismiss,
 }: {
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
   notifs: DBNotification[];
+  dismissedIds: Set<string>;
+  onDismiss: (id: string) => void;
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
   const SNAP_HALF = Math.min(380, SCREEN_H * 0.55);
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
   const currentH = useRef(SNAP_HALF);
   const slideAnim = useRef(new Animated.Value(400)).current;
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const visibleNotifs = useMemo(() => notifs.filter(n => !dismissed.has(n.id)), [notifs, dismissed]);
+  const visibleNotifs = useMemo(() => notifs.filter(n => !dismissedIds.has(n.id)), [notifs, dismissedIds]);
 
   useEffect(() => {
     if (visible) {
@@ -448,7 +454,7 @@ function NotificationsDrawer({
                       <Text style={styles.notifSwipeDeleteText}>✕</Text>
                     </View>
                   )}
-                  onSwipeableOpen={() => setDismissed(prev => new Set([...prev, item.id]))}
+                  onSwipeableOpen={() => onDismiss(item.id)}
                   rightThreshold={60}
                 >
                   <TouchableOpacity

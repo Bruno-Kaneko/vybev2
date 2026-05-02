@@ -146,9 +146,22 @@ export default function ChatScreen() {
     setText('');
 
     if (isReal && chatId && authUser) {
+      const tempId = `temp-${Date.now()}`;
+      setMessages(prev => [...prev, {
+        id: tempId,
+        senderId: authUser.id,
+        text: trimmed,
+        createdAt: Date.now(),
+      }]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
       try {
-        await sendMessage(chatId, authUser.id, trimmed);
-      } catch {}
+        const { id: realId, created_at } = await sendMessage(chatId, authUser.id, trimmed);
+        setMessages(prev => prev.map(m =>
+          m.id === tempId ? { ...m, id: realId, createdAt: new Date(created_at).getTime() } : m
+        ));
+      } catch {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+      }
     } else {
       setMessages(prev => [...prev, {
         id: `m${Date.now()}`,
@@ -156,8 +169,8 @@ export default function ChatScreen() {
         text: trimmed,
         createdAt: Date.now(),
       }]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
   const isExpired = remaining <= 0;

@@ -71,7 +71,7 @@ export default function FollowersScreen() {
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.row, { maxWidth: responsive.contentMaxWidth, alignSelf: 'center', width: '100%' }]}
+              style={styles.row}
               activeOpacity={0.8}
               onPress={() => router.push(`/profile/${item.id}`)}
             >
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   listContent: {
-    alignItems: 'center',
+    width: '100%',
   },
   row: {
     flexDirection: 'row',
