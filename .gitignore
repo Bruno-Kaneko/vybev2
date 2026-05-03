@@ -43,3 +43,7 @@ yarn-error.*
 
 # secrets (tokens — never commit)
 constants/mapbox-token.ts
+
+# generated / temp
+.claude/
+supabase/.temp/
