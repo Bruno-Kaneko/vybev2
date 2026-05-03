@@ -17,7 +17,7 @@ import { MOCK_USERS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getOrCreateChat, getMessages, sendMessage, getChatCreatedAt } from '@/lib/db';
+import { getOrCreateChat, createFreshChat, getMessages, sendMessage, getChatCreatedAt } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import type { DBMessage } from '@/lib/db';
 
@@ -154,10 +154,43 @@ export default function ChatScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [chatId]);
 
+  const handleResetAndSend = async (trimmed: string) => {
+    if (!authUser || !isReal) return;
+    try {
+      const newCid = await createFreshChat(authUser.id, id);
+      setChatId(newCid);
+      const newExpiresAt = Date.now() + CHAT_LIFETIME_MS;
+      setChatExpiresAt(newExpiresAt);
+      setRemaining(CHAT_LIFETIME_MS);
+      setMessages([]);
+      const tempId = `temp-${Date.now()}`;
+      setMessages([{ id: tempId, senderId: authUser.id, text: trimmed, createdAt: Date.now() }]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      const { id: realId, created_at } = await sendMessage(newCid, authUser.id, trimmed);
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: realId, createdAt: new Date(created_at).getTime() } : m));
+    } catch {}
+  };
+
   const send = async () => {
-    if (!text.trim() || remaining <= 0) return;
+    if (!text.trim()) return;
     const trimmed = text.trim();
     setText('');
+
+    if (isExpired && isReal && authUser) {
+      await handleResetAndSend(trimmed);
+      return;
+    }
+
+    if (!isReal || !chatId || !authUser) {
+      setMessages(prev => [...prev, {
+        id: `m${Date.now()}`,
+        senderId: authUser?.id ?? 'me',
+        text: trimmed,
+        createdAt: Date.now(),
+      }]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      return;
+    }
 
     if (isReal && chatId && authUser) {
       const tempId = `temp-${Date.now()}`;
@@ -176,50 +209,11 @@ export default function ChatScreen() {
       } catch {
         setMessages(prev => prev.filter(m => m.id !== tempId));
       }
-    } else {
-      setMessages(prev => [...prev, {
-        id: `m${Date.now()}`,
-        senderId: authUser?.id ?? 'me',
-        text: trimmed,
-        createdAt: Date.now(),
-      }]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
   };
 
   const isExpired = remaining <= 0;
   const isUrgent = remaining < 30 * 60 * 1000;
-
-  if (isExpired) {
-    return (
-      <View style={[styles.root, { paddingTop: insets.top }]}>
-        <View style={[styles.shell, { maxWidth: chatWidth }]}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.replace('/(tabs)/chat')} style={styles.backBtn}>
-              <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerProfile}
-              onPress={() => isReal && router.push(`/profile/${id}`)}
-              activeOpacity={isReal ? 0.75 : 1}
-            >
-              <Avatar uri={otherAvatar} size="sm" />
-              <View style={styles.headerCopy}>
-                <Text style={styles.headerName}>{otherName}</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.encerrado}>
-            <LockKeyhole color={Colors.textMuted} size={44} strokeWidth={1.5} />
-            <Text style={styles.encerradoTitle}>Conversa encerrada</Text>
-            <Text style={styles.encerradoSub}>
-              Esta conversa expirou após 8h.{'\n'}Mande uma nova mensagem para reconectar.
-            </Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <KeyboardAvoidingView
@@ -240,19 +234,35 @@ export default function ChatScreen() {
             <Avatar uri={otherAvatar} size="sm" />
             <View style={styles.headerCopy}>
               <Text style={styles.headerName}>{otherName}</Text>
-              {(() => {
+              {!isExpired && (() => {
                 const status = formatLastSeen(otherLastSeen, otherShowOnlineStatus);
                 return status ? <Text style={styles.headerSub}>{status}</Text> : null;
               })()}
             </View>
           </TouchableOpacity>
-          <View style={[styles.expiryBadge, isUrgent && styles.expiryBadgeUrgent]}>
-            <Timer color={Colors.secondary} size={12} strokeWidth={2.2} />
-            <Text style={[styles.expiryText, isUrgent && styles.expiryTextUrgent]}>
-              {formatCountdown(remaining)}
+          {isExpired ? (
+            <View style={styles.expiryBadgeExpired}>
+              <LockKeyhole color={Colors.textMuted} size={12} strokeWidth={2.2} />
+              <Text style={styles.expiryTextExpired}>Encerrado</Text>
+            </View>
+          ) : (
+            <View style={[styles.expiryBadge, isUrgent && styles.expiryBadgeUrgent]}>
+              <Timer color={Colors.secondary} size={12} strokeWidth={2.2} />
+              <Text style={[styles.expiryText, isUrgent && styles.expiryTextUrgent]}>
+                {formatCountdown(remaining)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {isExpired && (
+          <View style={styles.expiredBanner}>
+            <LockKeyhole color={Colors.textMuted} size={14} strokeWidth={2} />
+            <Text style={styles.expiredBannerText}>
+              Conversa encerrada — nova mensagem inicia um novo chat
             </Text>
           </View>
-        </View>
+        )}
 
         <FlatList
           ref={flatListRef}
@@ -402,23 +412,37 @@ const styles = StyleSheet.create({
     margin: 4,
   },
   sendBtnDisabled: { backgroundColor: Colors.surface },
-  encerrado: {
-    flex: 1,
+  expiryBadgeExpired: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    padding: Spacing['2xl'],
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(136,136,153,0.12)',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  encerradoTitle: {
-    fontFamily: FontFamily.headingMedium,
-    fontSize: FontSize.xl,
-    color: Colors.white,
-  },
-  encerradoSub: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.sm,
+  expiryTextExpired: {
+    fontFamily: FontFamily.mono,
+    fontSize: FontSize.xs,
     color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: FontSize.sm * 1.6,
+  },
+  expiredBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  expiredBannerText: {
+    flex: 1,
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    lineHeight: FontSize.xs * 1.5,
   },
 });

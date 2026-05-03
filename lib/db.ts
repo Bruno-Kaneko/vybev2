@@ -261,13 +261,29 @@ export async function getOrCreateChat(
   const [a, b] = [myId, otherId].sort();
   const { data: existing } = await supabase
     .from('chats')
-    .select('id')
+    .select('id, created_at')
     .or(
       `and(participant_a.eq.${a},participant_b.eq.${b}),and(participant_a.eq.${b},participant_b.eq.${a})`
     )
     .maybeSingle();
-  if (existing) return existing.id as string;
+  if (existing) {
+    const age = Date.now() - new Date((existing as any).created_at).getTime();
+    if (age < 8 * 3600 * 1000) return existing.id as string;
+  }
 
+  const { data, error } = await supabase
+    .from('chats')
+    .insert({ participant_a: a, participant_b: b })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function createFreshChat(myId: string, otherId: string): Promise<string> {
+  const [a, b] = [myId, otherId].sort();
+  await supabase.from('chats').delete()
+    .or(`and(participant_a.eq.${a},participant_b.eq.${b}),and(participant_a.eq.${b},participant_b.eq.${a})`);
   const { data, error } = await supabase
     .from('chats')
     .insert({ participant_a: a, participant_b: b })
@@ -546,6 +562,10 @@ export async function getNotifications(userId: string): Promise<DBNotification[]
     .limit(50);
   if (error || !data) return [];
   return data as unknown as DBNotification[];
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  await supabase.from('notifications').delete().eq('id', id);
 }
 
 // ────────────────────────────────────────────────

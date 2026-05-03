@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {
   View,
@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, hasLiked, likePost, unlikePost, getNotifications, getChats, notifyUser } from '@/lib/db';
+import { getFeedPosts, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -70,7 +70,6 @@ export default function HomeScreen() {
   const [activePosts, setActivePosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [notifs, setNotifs] = useState<DBNotification[]>([]);
-  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
   const [realChats, setRealChats] = useState<DBChat[]>([]);
 
   const loadFeed = useCallback(async () => {
@@ -102,7 +101,7 @@ export default function HomeScreen() {
 
     const ch = supabase
       .channel(`home-notifs-${authUserHome.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${authUserHome.id}` }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${authUserHome.id}` }, () => {
         getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
       })
       .subscribe();
@@ -144,7 +143,7 @@ export default function HomeScreen() {
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
             onNotifPress={() => setNotifOpen(true)}
-            notifCount={notifs.filter(n => !n.read && !dismissedNotifIds.has(n.id)).length}
+            notifCount={notifs.filter(n => !n.read).length}
           />
         }
         renderItem={({ item }) => (
@@ -170,8 +169,10 @@ export default function HomeScreen() {
         onClose={() => setNotifOpen(false)}
         insets={insets}
         notifs={notifs}
-        dismissedIds={dismissedNotifIds}
-        onDismiss={(id) => setDismissedNotifIds(prev => new Set([...prev, id]))}
+        onDismiss={(id) => {
+          setNotifs(prev => prev.filter(n => n.id !== id));
+          deleteNotification(id).catch(() => {});
+        }}
       />
       <GrupoesDrawer
         visible={grupoesOpen}
@@ -383,14 +384,12 @@ function NotificationsDrawer({
   onClose,
   insets,
   notifs,
-  dismissedIds,
   onDismiss,
 }: {
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
   notifs: DBNotification[];
-  dismissedIds: Set<string>;
   onDismiss: (id: string) => void;
 }) {
   const { height: SCREEN_H } = useWindowDimensions();
@@ -398,7 +397,6 @@ function NotificationsDrawer({
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
   const currentH = useRef(SNAP_HALF);
   const slideAnim = useRef(new Animated.Value(400)).current;
-  const visibleNotifs = useMemo(() => notifs.filter(n => !dismissedIds.has(n.id)), [notifs, dismissedIds]);
 
   useEffect(() => {
     if (visible) {
@@ -447,7 +445,7 @@ function NotificationsDrawer({
             </TouchableOpacity>
           </View>
           <FlatList
-            data={visibleNotifs}
+            data={notifs}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
