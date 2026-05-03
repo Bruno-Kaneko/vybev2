@@ -288,13 +288,13 @@ export default function ProfileScreen() {
           <StatItem
             label="Seguidores"
             value={user.followers}
-            onPress={isReal ? () => router.push({ pathname: '/followers/[id]', params: { id: id!, type: 'followers' } }) : undefined}
+            onPress={isReal ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: id!, type: 'followers' } }) : undefined}
           />
           <View style={styles.statDivider} />
           <StatItem
             label="Seguindo"
             value={user.following}
-            onPress={isReal ? () => router.push({ pathname: '/followers/[id]', params: { id: id!, type: 'following' } }) : undefined}
+            onPress={isReal ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: id!, type: 'following' } }) : undefined}
           />
           <View style={styles.statDivider} />
           <StatItem label="Pontos" value={user.points} highlight />

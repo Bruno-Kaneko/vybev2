@@ -220,13 +220,13 @@ export default function MyProfileScreen() {
           <StatItem
             label="Seguidores"
             value={profileStats.followers}
-            onPress={user?.id ? () => router.push({ pathname: '/followers/[id]', params: { id: user.id, type: 'followers' } }) : undefined}
+            onPress={user?.id ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: user.id, type: 'followers' } }) : undefined}
           />
           <View style={styles.statDivider} />
           <StatItem
             label="Seguindo"
             value={profileStats.following}
-            onPress={user?.id ? () => router.push({ pathname: '/followers/[id]', params: { id: user.id, type: 'following' } }) : undefined}
+            onPress={user?.id ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: user.id, type: 'following' } }) : undefined}
           />
           <View style={styles.statDivider} />
           <StatItem label="Pontos" value={profileStats.points} highlight />

@@ -706,7 +706,7 @@ export async function getPlaceActivePosts(placeId: string): Promise<Post[]> {
     .order('created_at', { ascending: false })
     .limit(30);
   if (!data) return [];
-  return (data as DBPost[]).map(mapPost);
+  return (data as unknown as DBPost[]).map(mapPost);
 }
 
 export async function submitPlaceReport(
