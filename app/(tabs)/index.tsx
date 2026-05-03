@@ -58,6 +58,21 @@ function getClosesAtTs(closeHour: number): number {
   return closes.getTime();
 }
 
+function loadDismissedNotifIds(userId: string): Set<string> {
+  if (typeof window === 'undefined' || !window.localStorage) return new Set();
+  try {
+    return new Set(JSON.parse(localStorage.getItem(`vybe-dn-${userId}`) ?? '[]') as string[]);
+  } catch { return new Set(); }
+}
+
+function persistDismissedNotifId(userId: string, id: string) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const arr = [...loadDismissedNotifIds(userId), id].slice(-300);
+    localStorage.setItem(`vybe-dn-${userId}`, JSON.stringify(arr));
+  } catch {}
+}
+
 export default function HomeScreen() {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
@@ -96,13 +111,18 @@ export default function HomeScreen() {
   const { user: authUserHome } = useAuth();
   useEffect(() => {
     if (!authUserHome) return;
-    getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
-    getChats(authUserHome.id).then(setRealChats).catch(() => {});
+    const uid = authUserHome.id;
+    getNotifications(uid)
+      .then(data => setNotifs(data.filter(n => !loadDismissedNotifIds(uid).has(n.id))))
+      .catch(() => {});
+    getChats(uid).then(setRealChats).catch(() => {});
 
     const ch = supabase
-      .channel(`home-notifs-${authUserHome.id}-${Date.now()}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${authUserHome.id}` }, () => {
-        getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
+      .channel(`home-notifs-${uid}-${Date.now()}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, () => {
+        getNotifications(uid)
+          .then(data => setNotifs(data.filter(n => !loadDismissedNotifIds(uid).has(n.id))))
+          .catch(() => {});
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -171,6 +191,7 @@ export default function HomeScreen() {
         notifs={notifs}
         onDismiss={(id) => {
           setNotifs(prev => prev.filter(n => n.id !== id));
+          if (authUserHome) persistDismissedNotifId(authUserHome.id, id);
           deleteNotification(id).catch(() => {});
         }}
       />

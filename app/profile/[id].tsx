@@ -141,29 +141,16 @@ export default function ProfileScreen() {
     }
 
     if (following) {
-      const name = profileUser?.displayName ?? 'este usuário';
-      Alert.alert(
-        'Deixar de seguir?',
-        `Você vai deixar de seguir ${name}.`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Deixar de seguir',
-            style: 'destructive',
-            onPress: async () => {
-              setFollowLoading(true);
-              try {
-                await unfollowUser(authUser.id, id);
-                setFollowing(false);
-              } catch {
-                Alert.alert('Erro', 'Não foi possível completar a ação.');
-              } finally {
-                setFollowLoading(false);
-              }
-            },
-          },
-        ]
-      );
+      setFollowLoading(true);
+      setFollowing(false);
+      try {
+        await unfollowUser(authUser.id, id);
+      } catch {
+        setFollowing(true);
+        Alert.alert('Erro', 'Não foi possível deixar de seguir.');
+      } finally {
+        setFollowLoading(false);
+      }
       return;
     }
 
