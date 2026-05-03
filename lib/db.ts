@@ -634,3 +634,91 @@ export async function notifyUser(
     }).catch(() => {});
   } catch {}
 }
+
+// ────────────────────────────────────────────────
+// PLACES
+// ────────────────────────────────────────────────
+
+export type DBPlace = {
+  id: string;
+  name: string;
+  address: string;
+  category: 'club' | 'bar' | 'event' | 'lounge';
+  lat: number;
+  lng: number;
+  neighborhood: string | null;
+  description: string | null;
+  tags: string[];
+  price_level: number | null;
+  cover_charge: number | null;
+  near_metro: boolean;
+  has_parking: boolean;
+  has_seating: boolean;
+  has_menu: boolean;
+  metro_name: string | null;
+  metro_distance_m: number | null;
+  parking_name: string | null;
+  parking_address: string | null;
+  follower_count: number;
+  crowd_level: string | null;
+  queue_level: string | null;
+  vibe: string | null;
+  crowd_updated_at: string | null;
+  created_at: string;
+};
+
+export async function getPlace(placeId: string): Promise<DBPlace | null> {
+  const { data, error } = await supabase
+    .from('places')
+    .select('*')
+    .eq('id', placeId)
+    .single();
+  if (error || !data) return null;
+  return data as DBPlace;
+}
+
+export async function getPlaceActivePosts(placeId: string): Promise<Post[]> {
+  const { data } = await supabase
+    .from('posts')
+    .select(POST_SELECT)
+    .eq('place_id', placeId)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (!data) return [];
+  return (data as DBPost[]).map(mapPost);
+}
+
+export async function submitPlaceReport(
+  placeId: string,
+  userId: string,
+  crowdLevel: string,
+  queueLevel: string,
+  vibe: string
+): Promise<void> {
+  await supabase.from('place_reports').insert({
+    place_id: placeId,
+    user_id: userId,
+    crowd_level: crowdLevel,
+    queue_level: queueLevel,
+    vibe,
+  });
+}
+
+export async function isFollowingPlace(userId: string, placeId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('place_follows')
+    .select('place_id')
+    .eq('user_id', userId)
+    .eq('place_id', placeId)
+    .maybeSingle();
+  return !!data;
+}
+
+export async function followPlace(userId: string, placeId: string): Promise<void> {
+  await supabase.from('place_follows').insert({ user_id: userId, place_id: placeId });
+}
+
+export async function unfollowPlace(userId: string, placeId: string): Promise<void> {
+  await supabase.from('place_follows').delete().eq('user_id', userId).eq('place_id', placeId);
+}

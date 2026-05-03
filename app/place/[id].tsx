@@ -1,29 +1,30 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking, Modal, Animated, Platform } from 'react-native';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking,
+  Modal, Animated, Platform, Image, RefreshControl,
+} from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  CalendarDays,
-  Camera,
-  ChevronLeft,
-  Clock,
-  Copy,
-  Grid2X2,
-  Heart,
-  Info,
-  MapPin,
-  Music,
-  Navigation,
-  Radio,
-  Share2,
-  X,
+  CalendarDays, Camera, ChevronLeft, Clock, Copy, Grid2X2,
+  Heart, Info, MapPin, Music, Navigation, Radio, Share2, X,
 } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
-import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
+import { MOCK_PLACES } from '@/constants/MockData';
+import { Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
-import type { CrowdLevel, QueueLevel, VibeType } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import {
+  getPlace, getPlaceActivePosts, submitPlaceReport,
+  isFollowingPlace, followPlace, unfollowPlace,
+} from '@/lib/db';
+import type { DBPlace } from '@/lib/db';
+import type { CrowdLevel, Place, Post, QueueLevel, VibeType } from '@/types';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Fallback extras for mock place IDs
 const PLACE_EXTRAS: Record<string, { parking?: { name: string; address: string }; metro?: { name: string; distanceM: number } }> = {
   place1:  { parking: { name: 'Estacionamento Augusta',    address: 'R. Bela Cintra, 210 — Consolação' },      metro: { name: 'Consolação',            distanceM: 320 } },
   place2:  { parking: { name: 'Park Paulista',             address: 'R. da Consolação, 222 — Consolação' },    metro: { name: 'Paulista',              distanceM: 210 } },
@@ -39,23 +40,56 @@ const PLACE_EXTRAS: Record<string, { parking?: { name: string; address: string }
   place12: { parking: { name: 'Estapar Rebouças',         address: 'Av. Rebouças, 4060 — Pinheiros' },        metro: { name: 'Clínicas',              distanceM: 650 } },
 };
 
-function copyToClipboard(text: string) {
-  if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
-    navigator.clipboard?.writeText(text).catch(() => {});
-  }
-}
-
 const MOCK_EVENTS = [
   { id: 'e1', date: 'Sex, 02 Mai', time: '23:00', title: 'Open Format Night', dj: 'DJ Marquinhos', price: 'R$ 40' },
   { id: 'e2', date: 'Sáb, 03 Mai', time: '22:00', title: 'Techno Session', dj: 'ANNA b Savage', price: 'R$ 80' },
   { id: 'e3', date: 'Sex, 09 Mai', time: '23:00', title: 'House Lovers', dj: 'Djeff', price: 'R$ 50' },
 ];
 
+function copyToClipboard(text: string) {
+  if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+    navigator.clipboard?.writeText(text).catch(() => {});
+  }
+}
+
+function mapDBPlace(p: DBPlace): Place {
+  return {
+    id: p.id,
+    name: p.name,
+    address: p.address,
+    category: p.category,
+    location: { latitude: p.lat, longitude: p.lng },
+    activePosts: 0,
+    activeUsers: 0,
+    followers: p.follower_count,
+    tags: p.tags ?? [],
+    neighborhood: p.neighborhood ?? undefined,
+    description: p.description ?? undefined,
+    priceLevel: (p.price_level as any) ?? undefined,
+    coverCharge: p.cover_charge ?? undefined,
+    nearMetro: p.near_metro,
+    hasParking: p.has_parking,
+    hasSeating: p.has_seating,
+    hasMenu: p.has_menu,
+    crowdLevel: (p.crowd_level as CrowdLevel) ?? undefined,
+    queueLevel: (p.queue_level as QueueLevel) ?? undefined,
+    vibe: (p.vibe as VibeType) ?? undefined,
+  };
+}
+
 export default function PlaceProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
+  const { user: authUser } = useAuth();
+  const isUUID = UUID_RE.test(id ?? '');
+
+  const [loading, setLoading] = useState(isUUID);
+  const [refreshing, setRefreshing] = useState(false);
+  const [realPlace, setRealPlace] = useState<DBPlace | null>(null);
+  const [realPosts, setRealPosts] = useState<Post[]>([]);
   const [following, setFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'info'>('posts');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -66,10 +100,59 @@ export default function PlaceProfileScreen() {
   const slideAnim = useRef(new Animated.Value(400)).current;
   const reportSlideAnim = useRef(new Animated.Value(500)).current;
 
-  const showCopied = (type: 'address' | 'parking') => {
-    setCopiedMsg(type);
-    setTimeout(() => setCopiedMsg(null), 2000);
-  };
+  // Resolve place — real DB or mock fallback
+  const mockPlace = MOCK_PLACES.find(p => p.id === id) ?? MOCK_PLACES[0];
+  const place: Place = isUUID && realPlace ? mapDBPlace(realPlace) : mockPlace;
+
+  // Extras for metro/parking
+  const extras = useMemo(() => {
+    if (isUUID && realPlace) {
+      return {
+        metro: realPlace.metro_name ? { name: realPlace.metro_name, distanceM: realPlace.metro_distance_m ?? 0 } : undefined,
+        parking: realPlace.parking_name ? { name: realPlace.parking_name, address: realPlace.parking_address ?? '' } : undefined,
+      };
+    }
+    return PLACE_EXTRAS[place.id] ?? {};
+  }, [isUUID, realPlace, place.id]);
+
+  const [liveCrowd, setLiveCrowd] = useState<CrowdLevel | undefined>(mockPlace.crowdLevel);
+  const [liveQueue, setLiveQueue] = useState<QueueLevel | undefined>(mockPlace.queueLevel);
+  const [liveVibe, setLiveVibe] = useState<VibeType | undefined>(mockPlace.vibe);
+  const [draftCrowd, setDraftCrowd] = useState<CrowdLevel | undefined>(mockPlace.crowdLevel);
+  const [draftQueue, setDraftQueue] = useState<QueueLevel | undefined>(mockPlace.queueLevel);
+  const [draftVibe, setDraftVibe] = useState<VibeType | undefined>(mockPlace.vibe);
+
+  const loadData = useCallback(async () => {
+    if (!isUUID || !id) return;
+    try {
+      const [p, posts, isFollowing] = await Promise.all([
+        getPlace(id),
+        getPlaceActivePosts(id),
+        authUser ? isFollowingPlace(authUser.id, id) : Promise.resolve(false),
+      ]);
+      if (p) {
+        setRealPlace(p);
+        setLiveCrowd((p.crowd_level as CrowdLevel) ?? undefined);
+        setLiveQueue((p.queue_level as QueueLevel) ?? undefined);
+        setLiveVibe((p.vibe as VibeType) ?? undefined);
+        setDraftCrowd((p.crowd_level as CrowdLevel) ?? undefined);
+        setDraftQueue((p.queue_level as QueueLevel) ?? undefined);
+        setDraftVibe((p.vibe as VibeType) ?? undefined);
+      }
+      setRealPosts(posts);
+      setFollowing(isFollowing);
+    } catch {} finally {
+      setLoading(false);
+    }
+  }, [id, isUUID, authUser?.id]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
 
   useEffect(() => {
     if (scheduleOpen) {
@@ -88,36 +171,84 @@ export default function PlaceProfileScreen() {
     }
   }, [reportOpen]);
 
-  const submitReport = () => {
+  const canReport = !reportedAt || Date.now() - reportedAt > 30 * 60 * 1000;
+
+  const submitReport = async () => {
     setLiveCrowd(draftCrowd);
     setLiveQueue(draftQueue);
     setLiveVibe(draftVibe);
     setReportedAt(Date.now());
     setReportOpen(false);
+    if (isUUID && authUser && draftCrowd && draftQueue && draftVibe) {
+      submitPlaceReport(id, authUser.id, draftCrowd, draftQueue, draftVibe).catch(() => {});
+    }
   };
 
-  const place = MOCK_PLACES.find(item => item.id === id) ?? MOCK_PLACES[0];
-  const extras = PLACE_EXTRAS[place.id] ?? {};
-  const placePosts = MOCK_POSTS.filter(post => post.placeId === place.id);
+  const handleFollow = async () => {
+    if (!isUUID || !authUser) {
+      setFollowing(prev => !prev);
+      return;
+    }
+    const next = !following;
+    setFollowing(next);
+    setFollowLoading(true);
+    try {
+      if (next) await followPlace(authUser.id, id);
+      else await unfollowPlace(authUser.id, id);
+    } catch {
+      setFollowing(!next);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const showCopied = (type: 'address' | 'parking') => {
+    setCopiedMsg(type);
+    setTimeout(() => setCopiedMsg(null), 2000);
+  };
+
   const initials = useMemo(() => getInitials(place.name), [place.name]);
+  const postsToShow = isUUID ? realPosts : [];
 
-  const [liveCrowd, setLiveCrowd] = useState<CrowdLevel | undefined>(place.crowdLevel);
-  const [liveQueue, setLiveQueue] = useState<QueueLevel | undefined>(place.queueLevel);
-  const [liveVibe, setLiveVibe] = useState<VibeType | undefined>(place.vibe);
+  // Skeleton while loading real place
+  if (loading) {
+    return (
+      <View style={[styles.root, { backgroundColor: Colors.background }]}>
+        <View style={[styles.topActions, { paddingTop: insets.top + Spacing.sm }]} pointerEvents="box-none">
+          <TouchableOpacity onPress={() => router.back()} style={styles.circleButton} activeOpacity={0.8}>
+            <ChevronLeft color={Colors.white} size={21} strokeWidth={2.4} />
+          </TouchableOpacity>
+        </View>
+        <Skeleton width="100%" height={226} borderRadius={0} />
+        <View style={{ padding: Spacing.xl, gap: Spacing.lg }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+            <Skeleton width={76} height={76} borderRadius={38} />
+            <View style={{ flex: 1, gap: 8 }}>
+              <Skeleton width="60%" height={18} borderRadius={8} />
+              <Skeleton width="80%" height={12} borderRadius={6} />
+            </View>
+          </View>
+          <Skeleton width="100%" height={44} borderRadius={12} />
+          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+            {[0, 1, 2].map(i => <Skeleton key={i} width="31%" height={100} borderRadius={10} />)}
+          </View>
+        </View>
+      </View>
+    );
+  }
 
-  const [draftCrowd, setDraftCrowd] = useState<CrowdLevel | undefined>(place.crowdLevel);
-  const [draftQueue, setDraftQueue] = useState<QueueLevel | undefined>(place.queueLevel);
-  const [draftVibe, setDraftVibe] = useState<VibeType | undefined>(place.vibe);
+  const thumbGap = Spacing.xs;
+  const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
+  const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
   return (
     <View style={styles.root}>
-      {/* Fixed overlay buttons — outside ScrollView so overflow:hidden on cover never clips them */}
       <View style={[styles.topActions, { paddingTop: insets.top + Spacing.sm }]} pointerEvents="box-none">
         <TouchableOpacity onPress={() => router.back()} style={styles.circleButton} activeOpacity={0.8}>
           <ChevronLeft color={Colors.white} size={21} strokeWidth={2.4} />
         </TouchableOpacity>
         <View style={styles.topRight}>
-          <TouchableOpacity onPress={() => setFollowing(prev => !prev)} style={styles.circleButton} activeOpacity={0.8}>
+          <TouchableOpacity onPress={handleFollow} style={styles.circleButton} activeOpacity={0.8} disabled={followLoading}>
             <Heart
               color={following ? Colors.secondary : Colors.white}
               fill={following ? Colors.secondary : 'transparent'}
@@ -135,10 +266,22 @@ export default function PlaceProfileScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 94 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 94 }}
+        refreshControl={
+          isUUID ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.secondary}
+              colors={[Colors.secondary]}
+            />
+          ) : undefined
+        }
+      >
         <View style={[styles.cover, { paddingTop: insets.top + Spacing.lg }]}>
           <Text style={styles.coverInitials}>{initials}</Text>
-
           <View style={styles.tagsRow}>
             {(place.tags ?? []).slice(0, 3).map(tag => (
               <View key={tag} style={styles.tagPill}>
@@ -148,15 +291,7 @@ export default function PlaceProfileScreen() {
           </View>
         </View>
 
-        <View
-          style={[
-            styles.body,
-            {
-              paddingHorizontal: responsive.pagePadding,
-              alignItems: 'center',
-            },
-          ]}
-        >
+        <View style={[styles.body, { paddingHorizontal: responsive.pagePadding, alignItems: 'center' }]}>
           <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
             <View style={styles.identityRow}>
               <View style={styles.avatar}>
@@ -167,7 +302,7 @@ export default function PlaceProfileScreen() {
                 <View style={styles.addressRow}>
                   <MapPin color={Colors.primaryShade} size={13} strokeWidth={2.3} />
                   <Text style={styles.addressText} numberOfLines={1}>{place.address}</Text>
-                  <Text style={styles.dotText}>-</Text>
+                  <Text style={styles.dotText}>·</Text>
                   <Text style={styles.addressText}>{place.followers ?? 0} seguidores</Text>
                 </View>
               </View>
@@ -175,9 +310,10 @@ export default function PlaceProfileScreen() {
 
             <View style={styles.actionsRow}>
               <TouchableOpacity
-                onPress={() => setFollowing(prev => !prev)}
+                onPress={handleFollow}
                 style={[styles.followButton, following && styles.followButtonActive]}
                 activeOpacity={0.85}
+                disabled={followLoading}
               >
                 <Text style={styles.followText}>{following ? 'Seguindo' : '+ Seguir'}</Text>
               </TouchableOpacity>
@@ -197,21 +333,31 @@ export default function PlaceProfileScreen() {
             </View>
 
             {activeTab === 'posts' ? (
-              <View style={styles.emptyArea}>
-                {placePosts.length ? (
-                  <View style={styles.postSummary}>
-                    <Camera color={Colors.primaryShade} size={34} strokeWidth={1.9} />
-                    <Text style={styles.emptyTitle}>{placePosts.length} posts ativos</Text>
-                    <Text style={styles.emptyText}>Veja momentos recentes desse lugar no feed.</Text>
-                  </View>
-                ) : (
-                  <>
-                    <Camera color={Colors.primaryShade} size={46} strokeWidth={1.8} />
-                    <Text style={styles.emptyTitle}>Nenhuma foto ainda</Text>
-                    <Text style={styles.emptyText}>Seja o primeiro a postar aqui.</Text>
-                  </>
-                )}
-              </View>
+              postsToShow.length > 0 ? (
+                <View style={[styles.postsGrid, { gap: thumbGap }]}>
+                  {postsToShow.map(post => (
+                    <TouchableOpacity
+                      key={post.id}
+                      style={{ width: thumbSize, height: thumbSize * 1.28, borderRadius: Radius.md, overflow: 'hidden', backgroundColor: Colors.surface }}
+                      onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+                      activeOpacity={0.85}
+                    >
+                      <Image source={{ uri: post.imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      <LinearGradient colors={['transparent', 'rgba(10,10,15,0.65)']} style={StyleSheet.absoluteFill} />
+                      <View style={{ position: 'absolute', left: 5, right: 5, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <MapPin color={Colors.textMuted} size={10} strokeWidth={2.2} />
+                        <Text style={{ flex: 1, fontFamily: FontFamily.body, fontSize: 9, color: Colors.textMuted }} numberOfLines={1}>{post.user.displayName}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyArea}>
+                  <Camera color={Colors.primaryShade} size={46} strokeWidth={1.8} />
+                  <Text style={styles.emptyTitle}>Nenhuma foto ainda</Text>
+                  <Text style={styles.emptyText}>Seja o primeiro a postar aqui.</Text>
+                </View>
+              )
             ) : (
               <View style={styles.infoTab}>
                 <View style={styles.infoBlock}>
@@ -243,7 +389,10 @@ export default function PlaceProfileScreen() {
                 {place.priceLevel !== undefined && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Preço</Text>
-                    <Text style={styles.priceText}>{'$'.repeat(place.priceLevel)}<Text style={styles.priceGhost}>{'$'.repeat(5 - place.priceLevel)}</Text></Text>
+                    <Text style={styles.priceText}>
+                      {'$'.repeat(place.priceLevel)}
+                      <Text style={styles.priceGhost}>{'$'.repeat(5 - place.priceLevel)}</Text>
+                    </Text>
                   </View>
                 )}
                 {place.coverCharge !== undefined && (
@@ -252,7 +401,7 @@ export default function PlaceProfileScreen() {
                     <Text style={styles.infoText}>{place.coverCharge === 0 ? 'Gratuita' : `R$ ${place.coverCharge}`}</Text>
                   </View>
                 )}
-                {liveCrowd !== undefined && (
+                {liveCrowd && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Lotação agora</Text>
                     <View style={styles.crowdRow}>
@@ -263,13 +412,13 @@ export default function PlaceProfileScreen() {
                     </View>
                   </View>
                 )}
-                {liveQueue !== undefined && (
+                {liveQueue && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Fila agora</Text>
                     <Text style={styles.infoText}>{liveQueue.charAt(0).toUpperCase() + liveQueue.slice(1)}</Text>
                   </View>
                 )}
-                {liveVibe !== undefined && (
+                {liveVibe && (
                   <View style={styles.infoBlock}>
                     <Text style={styles.infoLabel}>Vibe</Text>
                     <Text style={styles.infoText}>{liveVibe.charAt(0).toUpperCase() + liveVibe.slice(1)}</Text>
@@ -317,13 +466,15 @@ export default function PlaceProfileScreen() {
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.sm }]}>
         {reportedAt && (
-          <Text style={styles.reportedMsg}>✓ Atualizado agora · por você</Text>
+          <Text style={styles.reportedMsg}>
+            ✓ Report enviado · {canReport ? 'pode reportar de novo' : 'próximo em 30 min'}
+          </Text>
         )}
         <View style={styles.bottomRow}>
           <TouchableOpacity
-            style={styles.reportButton}
+            style={[styles.reportButton, !canReport && { opacity: 0.45 }]}
             activeOpacity={0.86}
-            onPress={() => setReportOpen(true)}
+            onPress={() => canReport && setReportOpen(true)}
           >
             <Radio color={Colors.secondary} size={17} strokeWidth={2.2} />
             <Text style={styles.reportText}>Reportar</Text>
@@ -343,7 +494,7 @@ export default function PlaceProfileScreen() {
               end={{ x: 1, y: 0 }}
             />
             <Navigation color={Colors.white} size={18} strokeWidth={2.3} />
-            <Text style={styles.goText}>Ir pra la</Text>
+            <Text style={styles.goText}>Ir pra lá</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -456,7 +607,9 @@ export default function PlaceProfileScreen() {
                   onPress={() => setDraftCrowd(val)}
                   activeOpacity={0.8}
                 >
-                  <View style={[styles.chipDot, { backgroundColor: val === 'baixo' ? '#22C55E' : val === 'médio' ? '#F59E0B' : val === 'alto' ? '#EF4444' : '#FF2D78' }]} />
+                  <View style={[styles.chipDot, {
+                    backgroundColor: val === 'baixo' ? '#22C55E' : val === 'médio' ? '#F59E0B' : val === 'alto' ? '#EF4444' : '#FF2D78'
+                  }]} />
                   <Text style={[styles.reportChipText, draftCrowd === val && styles.reportChipTextActive]}>
                     {val.charAt(0).toUpperCase() + val.slice(1)}
                   </Text>
@@ -507,612 +660,195 @@ export default function PlaceProfileScreen() {
 }
 
 function getInitials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(part => part[0])
-    .join('')
-    .toUpperCase();
+  return name.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#05050B',
-  },
-  cover: {
-    height: 226,
-    backgroundColor: '#1A0F2B',
-    overflow: 'hidden',
-  },
+  root: { flex: 1, backgroundColor: '#05050B' },
+  cover: { height: 226, backgroundColor: '#1A0F2B', overflow: 'hidden' },
   topActions: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm,
   },
-  topRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   circleButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.42)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center',
   },
   coverInitials: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 70,
-    textAlign: 'center',
-    fontFamily: FontFamily.heading,
-    fontSize: 76,
-    color: 'rgba(155,93,229,0.45)',
+    position: 'absolute', left: 0, right: 0, bottom: 70, textAlign: 'center',
+    fontFamily: FontFamily.heading, fontSize: 76, color: 'rgba(155,93,229,0.45)',
   },
   tagsRow: {
-    position: 'absolute',
-    right: Spacing.lg,
-    bottom: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
+    position: 'absolute', right: Spacing.lg, bottom: Spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
   },
   tagPill: {
-    height: 26,
-    borderRadius: Radius.full,
-    backgroundColor: 'rgba(0,0,0,0.42)',
-    paddingHorizontal: Spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 26, borderRadius: Radius.full, backgroundColor: 'rgba(0,0,0,0.42)',
+    paddingHorizontal: Spacing.md, alignItems: 'center', justifyContent: 'center',
   },
-  tagText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.xs,
-    color: Colors.white,
-  },
-  body: {
-    borderTopWidth: 1,
-    borderTopColor: '#231832',
-  },
-  shell: {
-    width: '100%',
-  },
+  tagText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.xs, color: Colors.white },
+  body: { borderTopWidth: 1, borderTopColor: '#231832' },
+  shell: { width: '100%' },
   identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    paddingTop: Spacing.lg, paddingBottom: Spacing.lg,
   },
   avatar: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: '#32184F',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: '#32184F', alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize['2xl'],
-    color: Colors.secondary,
-  },
-  identityCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  placeName: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.xl,
-    color: Colors.white,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  addressText: {
-    flexShrink: 1,
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
-    color: Colors.primaryShade,
-  },
-  dotText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.xs,
-    color: Colors.primaryShade,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    paddingBottom: Spacing.md,
-  },
+  avatarText: { fontFamily: FontFamily.heading, fontSize: FontSize['2xl'], color: Colors.secondary },
+  identityCopy: { flex: 1, minWidth: 0 },
+  placeName: { fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  addressText: { flexShrink: 1, fontFamily: FontFamily.body, fontSize: FontSize.xs, color: Colors.primaryShade },
+  dotText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.xs, color: Colors.primaryShade },
+  actionsRow: { flexDirection: 'row', gap: Spacing.sm, paddingBottom: Spacing.md },
   followButton: {
-    flex: 1,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, height: 44, borderRadius: Radius.md,
+    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
   },
-  followButtonActive: {
-    backgroundColor: Colors.secondaryShade,
-  },
-  followText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.sm,
-    color: Colors.white,
-  },
+  followButtonActive: { backgroundColor: Colors.secondaryShade },
+  followText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.sm, color: Colors.white },
   scheduleButton: {
-    flex: 1,
-    height: 44,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: '#252138',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
+    flex: 1, height: 44, borderRadius: Radius.md, borderWidth: 1, borderColor: '#252138',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs,
   },
-  scheduleText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.sm,
-    color: Colors.white,
-  },
+  scheduleText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.sm, color: Colors.white },
   tabsRow: {
-    height: 54,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#252138',
-    flexDirection: 'row',
+    height: 54, borderTopWidth: 1, borderBottomWidth: 1,
+    borderColor: '#252138', flexDirection: 'row',
   },
-  tabActive: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.white,
-  },
-  tabInactive: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyArea: {
-    minHeight: 360,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-  },
-  postSummary: {
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  emptyTitle: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.md,
-    color: Colors.white,
-  },
-  emptyText: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.sm,
-    color: Colors.primaryShade,
-    textAlign: 'center',
-  },
+  tabActive: { flex: 1, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: Colors.white },
+  tabInactive: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  postsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingTop: Spacing.md },
+  emptyArea: { minHeight: 360, alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
+  emptyTitle: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.md, color: Colors.white },
+  emptyText: { fontFamily: FontFamily.body, fontSize: FontSize.sm, color: Colors.primaryShade, textAlign: 'center' },
   bottomBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
-    backgroundColor: 'rgba(5,5,11,0.96)',
-    borderTopWidth: 1,
-    borderTopColor: '#252138',
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingHorizontal: Spacing.md, paddingTop: Spacing.sm,
+    backgroundColor: 'rgba(5,5,11,0.96)', borderTopWidth: 1, borderTopColor: '#252138',
   },
   reportedMsg: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.xs,
-    color: '#22C55E',
-    textAlign: 'center',
-    marginBottom: Spacing.xs,
+    fontFamily: FontFamily.bodyMedium, fontSize: FontSize.xs,
+    color: '#22C55E', textAlign: 'center', marginBottom: Spacing.xs,
   },
-  bottomRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
+  bottomRow: { flexDirection: 'row', gap: Spacing.sm },
   reportButton: {
-    height: 56,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,45,120,0.4)',
-    backgroundColor: 'rgba(255,45,120,0.08)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
+    height: 56, paddingHorizontal: Spacing.lg, borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: 'rgba(255,45,120,0.4)', backgroundColor: 'rgba(255,45,120,0.08)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs,
   },
-  reportText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.sm,
-    color: Colors.secondary,
-  },
+  reportText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.sm, color: Colors.secondary },
   goButton: {
-    flex: 1,
-    height: 56,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
+    flex: 1, height: 56, borderRadius: Radius.lg, overflow: 'hidden',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
   },
-  goText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.md,
-    color: Colors.white,
-  },
-  // Info tab
-  infoTab: {
-    paddingTop: Spacing.lg,
-    gap: Spacing.xl,
-    paddingBottom: Spacing['2xl'],
-  },
-  infoBlock: {
-    gap: Spacing.xs,
-  },
+  goText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.md, color: Colors.white },
+  infoTab: { paddingTop: Spacing.lg, gap: Spacing.xl, paddingBottom: Spacing['2xl'] },
+  infoBlock: { gap: Spacing.xs },
   infoLabel: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.xs,
+    color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 1,
   },
-  infoText: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.md,
-    color: Colors.text,
-    lineHeight: FontSize.md * 1.5,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  tagsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.xs,
-  },
+  infoText: { fontFamily: FontFamily.body, fontSize: FontSize.md, color: Colors.text, lineHeight: FontSize.md * 1.5 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
   tagChip: {
-    height: 28,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: 'rgba(123,47,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(123,47,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 28, borderRadius: Radius.full, paddingHorizontal: Spacing.md,
+    backgroundColor: 'rgba(123,47,255,0.15)', borderWidth: 1,
+    borderColor: 'rgba(123,47,255,0.3)', alignItems: 'center', justifyContent: 'center',
   },
-  tagChipText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.xs,
-    color: Colors.secondary,
-  },
-  priceText: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.xl,
-    color: Colors.secondary,
-  },
-  priceGhost: {
-    color: Colors.border,
-  },
-  crowdRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  crowdDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  amenitiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
+  tagChipText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.xs, color: Colors.secondary },
+  priceText: { fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.secondary },
+  priceGhost: { color: Colors.border },
+  crowdRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  crowdDot: { width: 10, height: 10, borderRadius: 5 },
+  amenitiesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   amenityChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    borderRadius: Radius.full, borderWidth: 1,
+    borderColor: Colors.border, backgroundColor: Colors.surface,
   },
-  amenityChipActive: {
-    borderColor: 'rgba(255,45,120,0.35)',
-    backgroundColor: 'rgba(255,45,120,0.08)',
-  },
-  amenityChipWide: {
-    flexBasis: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  amenityText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-  },
-  amenitySubText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.xs,
-    color: Colors.secondary,
-  },
-  copyBtn: {
-    padding: Spacing.xs,
-    marginLeft: Spacing.xs,
-  },
-  copiedText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.xs,
-    color: Colors.secondary,
-  },
-  parkingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,45,120,0.25)',
-    padding: Spacing.md,
-    marginTop: Spacing.sm,
-  },
-  parkingCardLeft: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  parkingCardName: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.sm,
-    color: Colors.white,
-  },
-  parkingCardAddr: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  // Agenda modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'flex-end',
-  },
+  amenityChipActive: { borderColor: 'rgba(255,45,120,0.35)', backgroundColor: 'rgba(255,45,120,0.08)' },
+  amenityText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.xs, color: Colors.textMuted },
+  copyBtn: { padding: Spacing.xs, marginLeft: Spacing.xs },
+  copiedText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.xs, color: Colors.secondary },
+  modalOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    paddingTop: Spacing.md,
+    backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl, paddingTop: Spacing.md,
   },
   modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl, paddingBottom: Spacing.md,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  modalTitle: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.xl,
-    color: Colors.white,
-  },
-  modalClose: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  modalTitle: { fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white },
+  modalClose: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   eventRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: Spacing.md,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border, gap: Spacing.md,
   },
-  eventDateBox: {
-    width: 48,
-    alignItems: 'center',
-    gap: 2,
-  },
-  eventDate: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.lg,
-    color: Colors.secondary,
-  },
-  eventDay: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-  },
-  eventInfo: {
-    flex: 1,
-    minWidth: 0,
-    gap: 4,
-  },
-  eventTitle: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.md,
-    color: Colors.white,
-  },
-  eventMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  eventMetaText: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-  },
-  eventPrice: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.sm,
-    color: Colors.gold,
-  },
-  // Info popups
+  eventDateBox: { width: 48, alignItems: 'center', gap: 2 },
+  eventDate: { fontFamily: FontFamily.heading, fontSize: FontSize.lg, color: Colors.secondary },
+  eventDay: { fontFamily: FontFamily.body, fontSize: FontSize.xs, color: Colors.textMuted },
+  eventInfo: { flex: 1, minWidth: 0, gap: 4 },
+  eventTitle: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.md, color: Colors.white },
+  eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  eventMetaText: { fontFamily: FontFamily.body, fontSize: FontSize.xs, color: Colors.textMuted },
+  eventPrice: { fontFamily: FontFamily.heading, fontSize: FontSize.sm, color: Colors.gold },
   popupOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing['2xl'],
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing['2xl'],
   },
   popupCard: {
-    width: '100%',
-    maxWidth: 320,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing['2xl'],
-    alignItems: 'center',
-    gap: Spacing.sm,
+    width: '100%', maxWidth: 320, backgroundColor: Colors.surface,
+    borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border,
+    padding: Spacing['2xl'], alignItems: 'center', gap: Spacing.sm,
   },
-  popupEmoji: {
-    fontSize: 36,
-  },
+  popupEmoji: { fontSize: 36 },
   popupTitle: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontFamily: FontFamily.bodyMedium, fontSize: FontSize.xs,
+    color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 1,
   },
-  popupMain: {
-    fontFamily: FontFamily.heading,
-    fontSize: FontSize.xl,
-    color: Colors.white,
-    textAlign: 'center',
-  },
-  popupSub: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.sm,
-    color: Colors.textMuted,
-    textAlign: 'center',
-  },
+  popupMain: { fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white, textAlign: 'center' },
+  popupSub: { fontFamily: FontFamily.body, fontSize: FontSize.sm, color: Colors.textMuted, textAlign: 'center' },
   popupCopyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    backgroundColor: Colors.secondary,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.sm,
-    shadowColor: Colors.secondary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    backgroundColor: Colors.secondary, borderRadius: Radius.full,
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, marginTop: Spacing.sm,
+    shadowColor: Colors.secondary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10,
   },
-  popupCopyText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.sm,
-    color: Colors.white,
-  },
-  popupBtn: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-  },
-  popupBtnText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.sm,
-    color: Colors.textMuted,
-  },
+  popupCopyText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.sm, color: Colors.white },
+  popupBtn: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.xl },
+  popupBtnText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.sm, color: Colors.textMuted },
   reportSheet: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    paddingTop: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.md,
+    backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl, paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.xl, gap: Spacing.md,
   },
   reportSectionLabel: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: Spacing.xs,
+    fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.xs,
+    color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: Spacing.xs,
   },
-  reportChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
+  reportChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   reportChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceElevated,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surfaceElevated,
   },
-  reportChipActive: {
-    borderColor: Colors.secondary,
-    backgroundColor: 'rgba(255,45,120,0.12)',
-  },
-  chipDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  reportChipText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.sm,
-    color: Colors.textMuted,
-  },
-  reportChipTextActive: {
-    color: Colors.secondary,
-  },
+  reportChipActive: { borderColor: Colors.secondary, backgroundColor: 'rgba(255,45,120,0.12)' },
+  chipDot: { width: 8, height: 8, borderRadius: 4 },
+  reportChipText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.sm, color: Colors.textMuted },
+  reportChipTextActive: { color: Colors.secondary },
   reportSubmit: {
-    height: 52,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.sm,
-    shadowColor: Colors.secondary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    height: 52, borderRadius: Radius.lg, backgroundColor: Colors.secondary,
+    alignItems: 'center', justifyContent: 'center', marginTop: Spacing.sm,
+    shadowColor: Colors.secondary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 12,
   },
-  reportSubmitText: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.md,
-    color: Colors.white,
-  },
+  reportSubmitText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.md, color: Colors.white },
 });
