@@ -100,8 +100,8 @@ export default function HomeScreen() {
     getChats(authUserHome.id).then(setRealChats).catch(() => {});
 
     const ch = supabase
-      .channel(`home-notifs-${authUserHome.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${authUserHome.id}` }, () => {
+      .channel(`home-notifs-${authUserHome.id}-${Date.now()}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${authUserHome.id}` }, () => {
         getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
       })
       .subscribe();
