@@ -308,7 +308,16 @@ export async function getChats(userId: string): Promise<DBChat[]> {
     .or(`participant_a.eq.${userId},participant_b.eq.${userId}`)
     .order('last_message_at', { ascending: false, nullsFirst: false });
   if (error) return [];
-  return (data ?? []) as unknown as DBChat[];
+
+  // Keep only the most recent chat per other participant (ordered by last_message_at DESC already)
+  const seen = new Set<string>();
+  const deduped = (data ?? []).filter((chat: any) => {
+    const otherId = chat.participant_a === userId ? chat.participant_b : chat.participant_a;
+    if (seen.has(otherId)) return false;
+    seen.add(otherId);
+    return true;
+  });
+  return deduped as unknown as DBChat[];
 }
 
 export async function getMessages(chatId: string): Promise<DBMessage[]> {

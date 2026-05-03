@@ -160,17 +160,15 @@ const styles = StyleSheet.create({
   },
   tabRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 60,
+    alignItems: 'center',
+    height: 56,
     paddingHorizontal: Spacing.md,
-    paddingBottom: 4,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 50,
-    paddingBottom: 2,
+    height: 56,
   },
   tabInner: {
     minWidth: 54,
@@ -225,8 +223,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 60,
-    paddingBottom: 4,
+    height: 56,
   },
   cameraBtn: {
     width: 48,
