@@ -1,6 +1,15 @@
 import { supabase } from './supabase';
 import type { Post, User } from '@/types';
 
+export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ────────────────────────────────────────────────
 // DB row types
 // ────────────────────────────────────────────────
@@ -611,6 +620,20 @@ export async function getFollowingIds(userId: string): Promise<Set<string>> {
     .eq('follower_id', userId)
     .limit(1000);
   return new Set((data ?? []).map((r: any) => r.following_id as string));
+}
+
+export async function getFollowingFeedPosts(userId: string): Promise<Post[]> {
+  const ids = await getFollowingIds(userId);
+  if (ids.size === 0) return [];
+  const { data, error } = await supabase
+    .from('posts')
+    .select(POST_SELECT)
+    .in('user_id', [...ids])
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error || !data) return [];
+  return (data as unknown as DBPost[]).map(mapPost);
 }
 
 // ────────────────────────────────────────────────

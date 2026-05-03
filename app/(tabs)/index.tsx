@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import {
   View,
@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, getChats, notifyUser } from '@/lib/db';
+import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -34,16 +34,7 @@ import type { Post } from '@/types';
 
 const MAX_JOIN_RADIUS_KM = 0.5;
 
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const toRad = (v: number) => (v * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+type FeedTab = 'seguindo' | 'forYou' | 'geral';
 
 function isVenueOpen(openHour: number, closeHour: number): boolean {
   const h = new Date().getHours();
@@ -82,18 +73,53 @@ export default function HomeScreen() {
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string; closesAtTs: number } | null>(null);
   const [groupChatOpen, setGroupChatOpen] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
-  const [activePosts, setActivePosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [notifs, setNotifs] = useState<DBNotification[]>([]);
   const [realChats, setRealChats] = useState<DBChat[]>([]);
 
+  // Feed tabs
+  const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
+  const [geralPosts, setGeralPosts] = useState<Post[]>([]);
+  const [seguindoPosts, setSeguindoPosts] = useState<Post[]>([]);
+  const [homeCoords, setHomeCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+
+  const forYouPosts = useMemo(() =>
+    homeCoords
+      ? geralPosts.filter(p =>
+          haversineKm(homeCoords.latitude, homeCoords.longitude, p.location.latitude, p.location.longitude) <= 2)
+      : [],
+  [geralPosts, homeCoords]);
+
+  const currentTabPosts = activeTab === 'seguindo' ? seguindoPosts : activeTab === 'forYou' ? forYouPosts : geralPosts;
+
+  const { user: authUserHome } = useAuth();
+
   const loadFeed = useCallback(async () => {
     try {
-      const real = await getFeedPosts();
-      setActivePosts(real);
+      const [geral, seguindo] = await Promise.all([
+        getFeedPosts(),
+        authUserHome?.id ? getFollowingFeedPosts(authUserHome.id) : Promise.resolve([] as Post[]),
+      ]);
+      setGeralPosts(geral);
+      setSeguindoPosts(seguindo);
     } catch {
-      setActivePosts([]);
+      setGeralPosts([]);
+      setSeguindoPosts([]);
     }
+  }, [authUserHome?.id]);
+
+  const loadLocation = useCallback(async () => {
+    setLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') { setLocationDenied(true); return; }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setHomeCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      setLocationDenied(false);
+    } catch {}
+    finally { setLocationLoading(false); }
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -108,7 +134,19 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [loadFeed]);
 
-  const { user: authUserHome } = useAuth();
+  useEffect(() => {
+    loadLocation();
+    const interval = setInterval(loadLocation, 5 * 60_000);
+    return () => clearInterval(interval);
+  }, [loadLocation]);
+
+  const swipePanResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onPanResponderRelease: (_, g) => {
+      if (g.dx < -40) setActiveTab(t => t === 'seguindo' ? 'forYou' : t === 'forYou' ? 'geral' : 'geral');
+      else if (g.dx > 40) setActiveTab(t => t === 'geral' ? 'forYou' : t === 'forYou' ? 'seguindo' : 'seguindo');
+    },
+  })).current;
   useEffect(() => {
     if (!authUserHome) return;
     const uid = authUserHome.id;
@@ -139,9 +177,10 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top }]} {...swipePanResponder.panHandlers}>
       <FlatList
-        data={activePosts}
+        key={activeTab}
+        data={currentTabPosts}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
@@ -164,18 +203,17 @@ export default function HomeScreen() {
             onGrupoesPress={() => setGrupoesOpen(true)}
             onNotifPress={() => setNotifOpen(true)}
             notifCount={notifs.filter(n => !n.read).length}
+            activeTab={activeTab}
+            onTabPress={setActiveTab}
           />
         }
         renderItem={({ item }) => (
           <PostCard post={item} maxWidth={responsive.feedMaxWidth} isPhone={responsive.isPhone} />
         )}
         ListEmptyComponent={
-          !refreshing ? (
-            <View style={styles.feedEmpty}>
-              <Text style={styles.feedEmptyTitle}>Tá quieto por aqui...</Text>
-              <Text style={styles.feedEmptySub}>Seja o primeiro a postar onde você está!</Text>
-            </View>
-          ) : null
+          !refreshing
+            ? <FeedEmptyState tab={activeTab} locationDenied={locationDenied} locationLoading={locationLoading} />
+            : null
         }
       />
       <MessagesDrawer
@@ -217,12 +255,66 @@ export default function HomeScreen() {
   );
 }
 
-function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress, notifCount }: {
+function FeedEmptyState({ tab, locationDenied, locationLoading }: {
+  tab: FeedTab;
+  locationDenied: boolean;
+  locationLoading: boolean;
+}) {
+  if (tab === 'forYou' && locationLoading) {
+    return (
+      <View style={styles.feedEmpty}>
+        <Text style={styles.feedEmptyTitle}>Buscando sua localização...</Text>
+        <Text style={styles.feedEmptySub}>Aguarde um momento.</Text>
+      </View>
+    );
+  }
+  if (tab === 'forYou' && locationDenied) {
+    return (
+      <View style={styles.feedEmpty}>
+        <MapPin color={Colors.textMuted} size={40} strokeWidth={1.8} />
+        <Text style={styles.feedEmptyTitle}>Localização necessária</Text>
+        <Text style={styles.feedEmptySub}>Permita o acesso à localização para ver o que está acontecendo perto de você.</Text>
+      </View>
+    );
+  }
+  if (tab === 'forYou') {
+    return (
+      <View style={styles.feedEmpty}>
+        <Text style={styles.feedEmptyTitle}>Tá quieto aqui perto...</Text>
+        <Text style={styles.feedEmptySub}>Nenhum post a menos de 2 km de você. Seja o primeiro a postar!</Text>
+      </View>
+    );
+  }
+  if (tab === 'seguindo') {
+    return (
+      <View style={styles.feedEmpty}>
+        <Text style={styles.feedEmptyTitle}>Ninguém postou ainda</Text>
+        <Text style={styles.feedEmptySub}>Siga pessoas e lugares para ver o rolê delas aqui.</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.feedEmpty}>
+      <Text style={styles.feedEmptyTitle}>Tá quieto por aqui...</Text>
+      <Text style={styles.feedEmptySub}>Seja o primeiro a postar onde você está!</Text>
+    </View>
+  );
+}
+
+const FEED_TABS: { key: FeedTab; label: string }[] = [
+  { key: 'seguindo', label: 'Seguindo' },
+  { key: 'forYou',   label: 'FOR YOU'  },
+  { key: 'geral',    label: 'Geral'    },
+];
+
+function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress, notifCount, activeTab, onTabPress }: {
   maxWidth: number;
   onMessagesPress: () => void;
   onGrupoesPress: () => void;
   onNotifPress: () => void;
   notifCount: number;
+  activeTab: FeedTab;
+  onTabPress: (tab: FeedTab) => void;
 }) {
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -243,26 +335,39 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress, n
   const ringOpacity = pulseAnim.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 0.55, 0.35, 0] });
 
   return (
-    <View style={[styles.header, { maxWidth, alignSelf: 'center', width: '100%' }]}>
-      <BrandLogo width={118} height={38} />
-      <View style={styles.headerActions}>
-        <TouchableOpacity style={[styles.iconButton, styles.groupButton]} activeOpacity={0.78} onPress={onGrupoesPress}>
-          <Animated.View style={[styles.groupRing, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
-          <Animated.View style={{ transform: [{ scale: pulseScale }] }}>
-            <Users color={Colors.secondary} size={18} strokeWidth={2.1} />
-          </Animated.View>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onNotifPress}>
-          <Bell color={Colors.white} size={18} strokeWidth={2.1} />
-          {notifCount > 0 && (
-            <View style={styles.notifBadge}>
-              <Text style={styles.notifBadgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onMessagesPress}>
-          <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
-        </TouchableOpacity>
+    <View style={[{ maxWidth, alignSelf: 'center', width: '100%' }]}>
+      <View style={styles.header}>
+        <BrandLogo width={118} height={38} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={[styles.iconButton, styles.groupButton]} activeOpacity={0.78} onPress={onGrupoesPress}>
+            <Animated.View style={[styles.groupRing, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
+            <Animated.View style={{ transform: [{ scale: pulseScale }] }}>
+              <Users color={Colors.secondary} size={18} strokeWidth={2.1} />
+            </Animated.View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onNotifPress}>
+            <Bell color={Colors.white} size={18} strokeWidth={2.1} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} activeOpacity={0.78} onPress={onMessagesPress}>
+            <MessageCircle color={Colors.white} size={18} strokeWidth={2.1} />
+          </TouchableOpacity>
+        </View>
+      </View>
+      <View style={styles.feedTabBar}>
+        {FEED_TABS.map(({ key, label }) => {
+          const isActive = activeTab === key;
+          return (
+            <TouchableOpacity key={key} style={styles.feedTabItem} onPress={() => onTabPress(key)} activeOpacity={0.75}>
+              <Text style={[styles.feedTabLabel, isActive && styles.feedTabLabelActive]}>{label}</Text>
+              <View style={[styles.feedTabIndicator, { opacity: isActive ? 1 : 0 }]} />
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
@@ -1214,8 +1319,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: Spacing['2xl'],
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
     paddingHorizontal: Spacing.md,
+  },
+  feedTabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
+  },
+  feedTabItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: Spacing.xs,
+  },
+  feedTabLabel: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    letterSpacing: 0.2,
+  },
+  feedTabLabelActive: {
+    fontFamily: FontFamily.headingMedium,
+    color: Colors.white,
+    fontSize: FontSize.md,
+  },
+  feedTabIndicator: {
+    height: 2,
+    width: 24,
+    borderRadius: 1,
+    backgroundColor: Colors.secondary,
   },
   headerActions: {
     flexDirection: 'row',
