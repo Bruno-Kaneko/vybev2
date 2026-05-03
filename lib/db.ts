@@ -259,13 +259,16 @@ export async function getOrCreateChat(
   otherId: string
 ): Promise<string> {
   const [a, b] = [myId, otherId].sort();
-  const { data: existing } = await supabase
+  // Use array+limit instead of maybeSingle — avoids PGRST116 when multiple rows exist for same pair
+  const { data: rows } = await supabase
     .from('chats')
     .select('id, created_at')
     .or(
       `and(participant_a.eq.${a},participant_b.eq.${b}),and(participant_a.eq.${b},participant_b.eq.${a})`
     )
-    .maybeSingle();
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const existing = rows?.[0];
   if (existing) {
     const age = Date.now() - new Date((existing as any).created_at).getTime();
     if (age < 8 * 3600 * 1000) return existing.id as string;
