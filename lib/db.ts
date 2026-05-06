@@ -123,13 +123,18 @@ const POST_SELECT = `
 // ────────────────────────────────────────────────
 
 export async function getProfile(userId: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
+  const [{ data, error }, { count: followerCount }, { count: followingCount }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', userId).single(),
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+  ]);
   if (error || !data) return null;
-  return mapProfile(data as DBProfile);
+  const profile = data as DBProfile;
+  return mapProfile({
+    ...profile,
+    follower_count: followerCount ?? profile.follower_count,
+    following_count: followingCount ?? profile.following_count,
+  });
 }
 
 export async function ensureProfile(userId: string, email: string, username?: string) {

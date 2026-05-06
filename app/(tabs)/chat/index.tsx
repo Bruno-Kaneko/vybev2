@@ -12,6 +12,8 @@ import { getChats } from '@/lib/db';
 import type { DBChat } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 
+const CHAT_LIFETIME_MS = 8 * 3600 * 1000;
+
 type RowItem = {
   id: string;
   otherId: string;
@@ -20,12 +22,14 @@ type RowItem = {
   lastMessage?: string;
   lastMessageAt?: number;
   unread: number;
+  isExpired: boolean;
 };
 
 
 function toRowItem(chat: DBChat, myId: string): RowItem {
   const iAmA = chat.participant_a === myId;
   const other = iAmA ? chat.profile_b : chat.profile_a;
+  const age = Date.now() - new Date(chat.created_at).getTime();
   return {
     id: chat.id,
     otherId: iAmA ? chat.participant_b : chat.participant_a,
@@ -34,6 +38,7 @@ function toRowItem(chat: DBChat, myId: string): RowItem {
     lastMessage: chat.last_message ?? undefined,
     lastMessageAt: chat.last_message_at ? new Date(chat.last_message_at).getTime() : undefined,
     unread: iAmA ? chat.unread_a : chat.unread_b,
+    isExpired: age >= CHAT_LIFETIME_MS,
   };
 }
 
@@ -131,8 +136,11 @@ function ChatRow({ row, maxWidth }: { row: RowItem; maxWidth: number }) {
           <Text style={styles.chatTime}>{row.lastMessageAt ? formatTimeAgo(row.lastMessageAt) : ''}</Text>
         </View>
         <View style={styles.chatBottomRow}>
-          <Text style={styles.chatPreview} numberOfLines={1}>{row.lastMessage}</Text>
-          {row.unread > 0 && <Badge count={row.unread} />}
+          {row.isExpired
+            ? <Text style={[styles.chatPreview, styles.chatExpired]}>Chat expirado</Text>
+            : <Text style={styles.chatPreview} numberOfLines={1}>{row.lastMessage}</Text>
+          }
+          {row.unread > 0 && !row.isExpired && <Badge count={row.unread} />}
         </View>
       </View>
     </TouchableOpacity>
@@ -210,6 +218,12 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
     color: Colors.textMuted,
+  },
+  chatExpired: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textDisabled,
+    fontStyle: 'italic',
   },
   empty: {
     width: '100%',

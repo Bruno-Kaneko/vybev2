@@ -17,7 +17,7 @@ import {
   PanResponder,
   useWindowDimensions,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
@@ -49,25 +49,16 @@ function getClosesAtTs(closeHour: number): number {
   return closes.getTime();
 }
 
-function loadDismissedNotifIds(userId: string): Set<string> {
-  if (typeof window === 'undefined' || !window.localStorage) return new Set();
-  try {
-    return new Set(JSON.parse(localStorage.getItem(`vybe-dn-${userId}`) ?? '[]') as string[]);
-  } catch { return new Set(); }
-}
-
-function persistDismissedNotifId(userId: string, id: string) {
-  if (typeof window === 'undefined' || !window.localStorage) return;
-  try {
-    const arr = [...loadDismissedNotifIds(userId), id].slice(-300);
-    localStorage.setItem(`vybe-dn-${userId}`, JSON.stringify(arr));
-  } catch {}
-}
 
 export default function HomeScreen() {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
+  const { openMessages } = useLocalSearchParams<{ openMessages?: string }>();
   const [messagesOpen, setMessagesOpen] = useState(false);
+
+  useEffect(() => {
+    if (openMessages === '1') setMessagesOpen(true);
+  }, [openMessages]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [grupoesOpen, setGrupoesOpen] = useState(false);
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string; closesAtTs: number } | null>(null);
@@ -150,17 +141,13 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!authUserHome) return;
     const uid = authUserHome.id;
-    getNotifications(uid)
-      .then(data => setNotifs(data.filter(n => !loadDismissedNotifIds(uid).has(n.id))))
-      .catch(() => {});
+    getNotifications(uid).then(setNotifs).catch(() => {});
     getChats(uid).then(setRealChats).catch(() => {});
 
     const ch = supabase
-      .channel(`home-notifs-${uid}-${Date.now()}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, () => {
-        getNotifications(uid)
-          .then(data => setNotifs(data.filter(n => !loadDismissedNotifIds(uid).has(n.id))))
-          .catch(() => {});
+      .channel(`home-notifs-${uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, () => {
+        getNotifications(uid).then(setNotifs).catch(() => {});
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -229,7 +216,6 @@ export default function HomeScreen() {
         notifs={notifs}
         onDismiss={(id) => {
           setNotifs(prev => prev.filter(n => n.id !== id));
-          if (authUserHome) persistDismissedNotifId(authUserHome.id, id);
           deleteNotification(id).catch(() => {});
         }}
       />
@@ -303,7 +289,7 @@ function FeedEmptyState({ tab, locationDenied, locationLoading }: {
 
 const FEED_TABS: { key: FeedTab; label: string }[] = [
   { key: 'seguindo', label: 'Seguindo' },
-  { key: 'forYou',   label: 'FOR YOU'  },
+  { key: 'forYou',   label: 'For You'  },
   { key: 'geral',    label: 'Geral'    },
 ];
 
@@ -592,13 +578,18 @@ function NotificationsDrawer({
                   : null;
               return (
                 <Swipeable
-                  renderRightActions={() => (
-                    <View style={styles.notifSwipeDelete}>
-                      <Text style={styles.notifSwipeDeleteText}>✕</Text>
-                    </View>
-                  )}
+                  renderRightActions={(_, dragX) => {
+                    const opacity = dragX.interpolate({ inputRange: [-80, -40], outputRange: [1, 0], extrapolate: 'clamp' });
+                    return (
+                      <Animated.View style={[styles.notifSwipeDelete, { opacity }]}>
+                        <Text style={styles.notifSwipeDeleteText}>✕</Text>
+                      </Animated.View>
+                    );
+                  }}
                   onSwipeableOpen={() => onDismiss(item.id)}
-                  rightThreshold={60}
+                  rightThreshold={50}
+                  friction={2}
+                  overshootRight={false}
                 >
                   <TouchableOpacity
                     style={styles.drawerRow}
@@ -1340,13 +1331,13 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.md,
     color: Colors.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   feedTabLabelActive: {
-    fontFamily: FontFamily.heading,
+    fontFamily: FontFamily.bodySemiBold,
     color: Colors.white,
-    fontSize: FontSize.lg,
-    letterSpacing: 0.5,
+    fontSize: FontSize.md,
+    letterSpacing: 0.2,
   },
   feedTabIndicator: {
     height: 2,
