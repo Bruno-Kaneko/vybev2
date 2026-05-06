@@ -218,8 +218,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.root, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : insets.bottom + 72}
     >
       <View style={[styles.shell, { maxWidth: chatWidth }]}>
         <View style={styles.header}>
@@ -275,7 +275,7 @@ export default function ChatScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
 
-        <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, Spacing.md) }]}>
+        <View style={[styles.inputRow, { paddingBottom: insets.bottom + 72 }]}>
           <View style={styles.inputShell}>
             <TextInput
               value={text}

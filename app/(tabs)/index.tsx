@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
   View,
   Text,
@@ -141,13 +141,13 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!authUserHome) return;
     const uid = authUserHome.id;
-    getNotifications(uid).then(setNotifs).catch(() => {});
+    getNotifications(uid).then(data => setNotifs(data.filter(n => !n.read))).catch(() => {});
     getChats(uid).then(setRealChats).catch(() => {});
 
     const ch = supabase
       .channel(`home-notifs-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, () => {
-        getNotifications(uid).then(setNotifs).catch(() => {});
+        getNotifications(uid).then(data => setNotifs(data.filter(n => !n.read))).catch(() => {});
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -216,7 +216,9 @@ export default function HomeScreen() {
         notifs={notifs}
         onDismiss={(id) => {
           setNotifs(prev => prev.filter(n => n.id !== id));
-          deleteNotification(id).catch(() => {});
+          deleteNotification(id).catch(() => {
+            import('@/lib/db').then(({ markNotificationRead }) => markNotificationRead(id).catch(() => {}));
+          });
         }}
       />
       <GrupoesDrawer
@@ -380,12 +382,7 @@ function DrawerRealChatRow({ chat, myId, onClose }: { chat: DBChat; myId: string
       </TouchableOpacity>
       <View style={styles.drawerRowInfo}>
         <View style={styles.drawerRowTop}>
-          <TouchableOpacity
-            activeOpacity={0.75}
-            onPress={() => { onClose(); router.push(`/profile/${otherId}` as any); }}
-          >
-            <Text style={[styles.drawerRowName, { color: Colors.white }]}>{other?.display_name ?? other?.username ?? 'Usuário'}</Text>
-          </TouchableOpacity>
+          <Text style={[styles.drawerRowName, { color: Colors.white }]}>{other?.display_name ?? other?.username ?? 'Usuário'}</Text>
           <Text style={styles.drawerRowTime}>{timeStr}</Text>
         </View>
         <Text style={styles.drawerRowPreview} numberOfLines={1}>{chat.last_message ?? ''}</Text>
@@ -577,18 +574,14 @@ function NotificationsDrawer({
                   ? `/profile/${item.actor_id}`
                   : null;
               return (
-                <Swipeable
-                  renderRightActions={(_, dragX) => {
-                    const opacity = dragX.interpolate({ inputRange: [-80, -40], outputRange: [1, 0], extrapolate: 'clamp' });
-                    return (
-                      <Animated.View style={[styles.notifSwipeDelete, { opacity }]}>
-                        <Text style={styles.notifSwipeDeleteText}>✕</Text>
-                      </Animated.View>
-                    );
-                  }}
+                <ReanimatedSwipeable
+                  renderRightActions={() => (
+                    <View style={styles.notifSwipeDelete}>
+                      <Text style={styles.notifSwipeDeleteText}>✕</Text>
+                    </View>
+                  )}
                   onSwipeableOpen={() => onDismiss(item.id)}
                   rightThreshold={50}
-                  friction={2}
                   overshootRight={false}
                 >
                   <TouchableOpacity
@@ -607,7 +600,7 @@ function NotificationsDrawer({
                       <Text style={styles.drawerRowTime}>{timeStr}</Text>
                     </View>
                   </TouchableOpacity>
-                </Swipeable>
+                </ReanimatedSwipeable>
               );
             }}
           />

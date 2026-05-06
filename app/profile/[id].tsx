@@ -69,6 +69,7 @@ export default function ProfileScreen() {
   const [followLoading, setFollowLoading] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportSent, setReportSent] = useState(false);
+  const [unfollowConfirmOpen, setUnfollowConfirmOpen] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -141,16 +142,7 @@ export default function ProfileScreen() {
     }
 
     if (following) {
-      setFollowLoading(true);
-      setFollowing(false);
-      try {
-        await unfollowUser(authUser.id, id);
-      } catch {
-        setFollowing(true);
-        Alert.alert('Erro', 'Não foi possível deixar de seguir.');
-      } finally {
-        setFollowLoading(false);
-      }
+      setUnfollowConfirmOpen(true);
       return;
     }
 
@@ -162,6 +154,20 @@ export default function ProfileScreen() {
       notifyUser(id, authUser.id, 'follow', null, 'passou a seguir você', 'VYBE', `${actorName} passou a seguir você`);
     } catch {
       Alert.alert('Erro', 'Não foi possível completar a ação.');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const doUnfollow = async () => {
+    if (!authUser || !id) return;
+    setUnfollowConfirmOpen(false);
+    setFollowLoading(true);
+    setFollowing(false);
+    try {
+      await unfollowUser(authUser.id, id);
+    } catch {
+      setFollowing(true);
     } finally {
       setFollowLoading(false);
     }
@@ -272,11 +278,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <StatItem
-            label="Seguidores"
-            value={user.followers}
-            onPress={isReal ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: id!, type: 'followers' } }) : undefined}
-          />
+          <StatItem label="Pontos" value={user.points} highlight />
           <View style={styles.statDivider} />
           <StatItem
             label="Seguindo"
@@ -284,7 +286,13 @@ export default function ProfileScreen() {
             onPress={isReal ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: id!, type: 'following' } }) : undefined}
           />
           <View style={styles.statDivider} />
-          <StatItem label="Pontos" value={user.points} highlight />
+          <StatItem
+            label="Seguidores"
+            value={user.followers}
+            onPress={isReal ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: id!, type: 'followers' } }) : undefined}
+          />
+          <View style={styles.statDivider} />
+          <StatItem label="Posts" value={userPosts.length} />
         </View>
 
         {!isOwnProfile && (
@@ -342,6 +350,36 @@ export default function ProfileScreen() {
         </View>
       </View>
     </ScrollView>
+
+    {/* Unfollow confirm modal */}
+    <Modal visible={unfollowConfirmOpen} transparent animationType="fade" onRequestClose={() => setUnfollowConfirmOpen(false)}>
+      <TouchableOpacity style={reportStyles.overlay} activeOpacity={1} onPress={() => setUnfollowConfirmOpen(false)}>
+        <View style={[reportStyles.sheet, { gap: Spacing.lg }]} onStartShouldSetResponder={() => true}>
+          <Text style={{ fontFamily: FontFamily.headingMedium, fontSize: FontSize.lg, color: Colors.white, textAlign: 'center' }}>
+            Deixar de seguir?
+          </Text>
+          <Text style={{ fontFamily: FontFamily.body, fontSize: FontSize.sm, color: Colors.textMuted, textAlign: 'center', lineHeight: FontSize.sm * 1.5 }}>
+            Você vai deixar de seguir {user.displayName}.
+          </Text>
+          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+            <TouchableOpacity
+              style={[unfollowStyles.btn, unfollowStyles.btnCancel]}
+              onPress={() => setUnfollowConfirmOpen(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={[unfollowStyles.btnText, { color: Colors.textMuted }]}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[unfollowStyles.btn, unfollowStyles.btnConfirm]}
+              onPress={doUnfollow}
+              activeOpacity={0.8}
+            >
+              <Text style={[unfollowStyles.btnText, { color: Colors.white }]}>Deixar de seguir</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
 
     {/* Report modal */}
     <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
@@ -586,6 +624,28 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.textMuted,
     textAlign: 'center',
+  },
+});
+
+const unfollowStyles = StyleSheet.create({
+  btn: {
+    flex: 1,
+    height: 44,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnCancel: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  btnConfirm: {
+    backgroundColor: Colors.urgent,
+  },
+  btnText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
   },
 });
 
