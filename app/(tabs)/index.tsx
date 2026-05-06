@@ -350,9 +350,9 @@ function HomeHeader({ maxWidth, onMessagesPress, onGrupoesPress, onNotifPress, n
         {FEED_TABS.map(({ key, label }) => {
           const isActive = activeTab === key;
           return (
-            <TouchableOpacity key={key} style={styles.feedTabItem} onPress={() => onTabPress(key)} activeOpacity={0.75}>
+            <TouchableOpacity key={key} style={styles.feedTabItem} onPress={() => onTabPress(key)} activeOpacity={0.85}>
               <Text style={[styles.feedTabLabel, isActive && styles.feedTabLabelActive]}>{label}</Text>
-              <View style={[styles.feedTabIndicator, { opacity: isActive ? 1 : 0 }]} />
+              {isActive && <View style={styles.feedTabIndicator} />}
             </TouchableOpacity>
           );
         })}
@@ -1308,35 +1308,33 @@ const styles = StyleSheet.create({
   },
   feedTabBar: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    marginBottom: Spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingBottom: Spacing.lg,
+    gap: Spacing.xl,
   },
   feedTabItem: {
-    flex: 1,
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: Spacing.sm,
+    gap: 5,
+    paddingVertical: Spacing.xs,
   },
   feedTabLabel: {
     fontFamily: FontFamily.bodyMedium,
     fontSize: FontSize.md,
-    color: Colors.textMuted,
-    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 0.3,
   },
   feedTabLabelActive: {
-    fontFamily: FontFamily.bodySemiBold,
+    fontFamily: FontFamily.heading,
     color: Colors.white,
-    fontSize: FontSize.md,
-    letterSpacing: 0.2,
+    fontSize: FontSize.xl,
+    letterSpacing: 0.3,
   },
   feedTabIndicator: {
     height: 2,
-    width: 36,
+    width: 20,
     borderRadius: 2,
-    backgroundColor: Colors.secondary,
+    backgroundColor: Colors.white,
     shadowColor: Colors.secondary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,

@@ -278,7 +278,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <StatItem label="Pontos" value={user.points} highlight />
+          <StatItem label="Posts" value={userPosts.length} />
           <View style={styles.statDivider} />
           <StatItem
             label="Seguindo"
@@ -292,7 +292,7 @@ export default function ProfileScreen() {
             onPress={isReal ? () => router.push({ pathname: '/followers/[id]' as any, params: { id: id!, type: 'followers' } }) : undefined}
           />
           <View style={styles.statDivider} />
-          <StatItem label="Posts" value={userPosts.length} />
+          <StatItem label="Pontos" value={user.points} highlight />
         </View>
 
         {!isOwnProfile && (

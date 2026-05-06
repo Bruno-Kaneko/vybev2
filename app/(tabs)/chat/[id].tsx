@@ -218,12 +218,12 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.root, { paddingTop: insets.top }]}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : insets.bottom + 72}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={insets.top}
     >
       <View style={[styles.shell, { maxWidth: chatWidth }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace({ pathname: '/(tabs)', params: { openMessages: '1' } } as any)} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/chat' as any)} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
           <TouchableOpacity

@@ -21,6 +21,7 @@
         "backgroundColor": "#0A0A0F"
       },
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "pan",
       "predictiveBackGestureEnabled": false,
       "package": "com.vybe.app"
     },
