@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, getChats, notifyUser } from '@/lib/db';
+import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, markAllNotificationsRead, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -188,7 +188,13 @@ export default function HomeScreen() {
             maxWidth={responsive.feedMaxWidth}
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
-            onNotifPress={() => setNotifOpen(true)}
+            onNotifPress={() => {
+              setNotifOpen(true);
+              if (authUserHome && notifs.some(n => !n.read)) {
+                markAllNotificationsRead(authUserHome.id).catch(() => {});
+                setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+              }
+            }}
             notifCount={notifs.filter(n => !n.read).length}
             activeTab={activeTab}
             onTabPress={setActiveTab}
