@@ -188,13 +188,7 @@ export default function HomeScreen() {
             maxWidth={responsive.feedMaxWidth}
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
-            onNotifPress={() => {
-              setNotifOpen(true);
-              if (authUserHome && notifs.some(n => !n.read)) {
-                markAllNotificationsRead(authUserHome.id).catch(() => {});
-                setNotifs(prev => prev.map(n => ({ ...n, read: true })));
-              }
-            }}
+            onNotifPress={() => setNotifOpen(true)}
             notifCount={notifs.filter(n => !n.read).length}
             activeTab={activeTab}
             onTabPress={setActiveTab}
@@ -217,14 +211,18 @@ export default function HomeScreen() {
       />
       <NotificationsDrawer
         visible={notifOpen}
-        onClose={() => setNotifOpen(false)}
+        onClose={() => {
+          setNotifOpen(false);
+          if (authUserHome && notifs.length > 0) {
+            markAllNotificationsRead(authUserHome.id).catch(() => {});
+            setNotifs([]);
+          }
+        }}
         insets={insets}
         notifs={notifs}
         onDismiss={(id) => {
           setNotifs(prev => prev.filter(n => n.id !== id));
-          deleteNotification(id).catch(() => {
-            import('@/lib/db').then(({ markNotificationRead }) => markNotificationRead(id).catch(() => {}));
-          });
+          deleteNotification(id).catch(() => {});
         }}
       />
       <GrupoesDrawer
