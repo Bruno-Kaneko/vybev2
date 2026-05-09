@@ -26,6 +26,30 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type MsgRow = { id: string; senderId: string; text: string; createdAt: number };
 
+const log = (...args: any[]) => { if (__DEV__) console.log('[CHAT]', ...args); };
+
+function sortByTime(a: MsgRow, b: MsgRow) { return a.createdAt - b.createdAt; }
+
+function mergeIncoming(prev: MsgRow[], incoming: MsgRow): MsgRow[] {
+  // Real ID já está na lista (re-entrega do realtime)
+  if (prev.some(p => p.id === incoming.id)) return prev;
+
+  // Existe uma temp do mesmo autor + mesmo texto → substitui pela real
+  const tempIdx = prev.findIndex(p =>
+    p.id.startsWith('temp-') &&
+    p.senderId === incoming.senderId &&
+    p.text === incoming.text
+  );
+  if (tempIdx >= 0) {
+    const next = prev.slice();
+    next[tempIdx] = incoming;
+    return next.sort(sortByTime);
+  }
+
+  // Nova mensagem — insere na posição cronológica correta
+  return [...prev, incoming].sort(sortByTime);
+}
+
 function formatLastSeen(lastSeenAt: number | null, showOnlineStatus: boolean): string {
   if (!showOnlineStatus) return '';
   if (!lastSeenAt) return '';
@@ -106,13 +130,15 @@ export default function ChatScreen() {
       setChatId(cid);
       const [msgs, createdAt] = await Promise.all([getMessages(cid), getChatCreatedAt(cid)]);
       setChatExpiresAt(createdAt + CHAT_LIFETIME_MS);
-      setMessages(msgs.map(m => ({
+      const rows = msgs.map(m => ({
         id: m.id,
         senderId: m.sender_id,
         text: m.text,
         createdAt: new Date(m.created_at).getTime(),
-      })));
-    } catch {}
+      })).sort(sortByTime);
+      log('INIT loaded', rows.length, 'msgs');
+      setMessages(rows);
+    } catch (e: any) { log('INIT err:', e?.message); }
   }, [authUser?.id, id]);
 
   useEffect(() => {
@@ -131,27 +157,26 @@ export default function ChatScreen() {
   // Realtime subscription
   useEffect(() => {
     if (!chatId) return;
+    log('SUB chat=', chatId);
     const channel = supabase
-      .channel(`chat-${chatId}-${Date.now()}`)
+      .channel(`chat:${chatId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
         (payload) => {
           const m = payload.new as DBMessage;
-          setMessages(prev => {
-            if (prev.find(p => p.id === m.id)) return prev;
-            return [...prev, {
-              id: m.id,
-              senderId: m.sender_id,
-              text: m.text,
-              createdAt: new Date(m.created_at).getTime(),
-            }];
-          });
+          log('▶ INSERT id=', m.id, 'from=', m.sender_id, 'text=', m.text);
+          setMessages(prev => mergeIncoming(prev, {
+            id: m.id,
+            senderId: m.sender_id,
+            text: m.text,
+            createdAt: new Date(m.created_at).getTime(),
+          }));
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         }
       )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      .subscribe((status) => log('channel status=', status));
+    return () => { log('UNSUB chat=', chatId); supabase.removeChannel(channel); };
   }, [chatId]);
 
   const handleResetAndSend = async (trimmed: string) => {
@@ -163,12 +188,16 @@ export default function ChatScreen() {
       setChatExpiresAt(newExpiresAt);
       setRemaining(CHAT_LIFETIME_MS);
       setMessages([]);
-      const tempId = `temp-${Date.now()}`;
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setMessages([{ id: tempId, senderId: authUser.id, text: trimmed, createdAt: Date.now() }]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
       const { id: realId, created_at } = await sendMessage(newCid, authUser.id, trimmed);
-      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: realId, createdAt: new Date(created_at).getTime() } : m));
-    } catch {}
+      setMessages(prev => {
+        if (!prev.some(m => m.id === tempId)) return prev;
+        if (prev.some(m => m.id === realId)) return prev.filter(m => m.id !== tempId);
+        return prev.map(m => m.id === tempId ? { ...m, id: realId, createdAt: new Date(created_at).getTime() } : m).sort(sortByTime);
+      });
+    } catch (e: any) { log('RESET_SEND err:', e?.message); }
   };
 
   const send = async () => {
@@ -193,20 +222,36 @@ export default function ChatScreen() {
     }
 
     if (isReal && chatId && authUser) {
-      const tempId = `temp-${Date.now()}`;
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      log('SEND temp=', tempId, 'text=', trimmed);
       setMessages(prev => [...prev, {
         id: tempId,
         senderId: authUser.id,
         text: trimmed,
         createdAt: Date.now(),
-      }]);
+      }].sort(sortByTime));
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
       try {
         const { id: realId, created_at } = await sendMessage(chatId, authUser.id, trimmed);
-        setMessages(prev => prev.map(m =>
-          m.id === tempId ? { ...m, id: realId, createdAt: new Date(created_at).getTime() } : m
-        ));
-      } catch {
+        log('SEND ok temp=', tempId, '→ real=', realId);
+        setMessages(prev => {
+          // Realtime já entregou e substituiu o temp — nada a fazer
+          if (!prev.some(m => m.id === tempId)) {
+            log('  temp já substituído pelo realtime');
+            return prev;
+          }
+          // Real ID já está na lista (algum caso raro) — apenas remove o temp
+          if (prev.some(m => m.id === realId)) {
+            log('  real já existe, removendo temp');
+            return prev.filter(m => m.id !== tempId);
+          }
+          // Substitui temp por real e mantém ordenação
+          return prev
+            .map(m => m.id === tempId ? { ...m, id: realId, createdAt: new Date(created_at).getTime() } : m)
+            .sort(sortByTime);
+        });
+      } catch (e: any) {
+        log('SEND err:', e?.message);
         setMessages(prev => prev.filter(m => m.id !== tempId));
       }
     }
