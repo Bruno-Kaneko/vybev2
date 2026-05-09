@@ -585,6 +585,7 @@ export async function getNotifications(userId: string): Promise<DBNotification[]
     .from('notifications')
     .select('id, user_id, actor_id, type, post_id, text, read, created_at, actor:profiles!actor_id(id, username, display_name, avatar_url)')
     .eq('user_id', userId)
+    .eq('read', false)
     .gte('created_at', cutoff)
     .order('created_at', { ascending: false })
     .limit(50);

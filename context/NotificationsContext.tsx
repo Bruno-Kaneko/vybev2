@@ -44,9 +44,16 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     const uid = userIdRef.current;
     if (!uid) { log('refresh skip: no user'); return; }
     try {
-      const data = await getNotifications(uid);
-      setNotifications(data);
-      log('refresh ok, total=', data.length, 'unread=', data.filter(n => !n.read).length);
+      const fresh = await getNotifications(uid);
+      setNotifications(prev => {
+        const existing = new Set(prev.map(p => p.id));
+        const newOnes = fresh.filter(f => !existing.has(f.id));
+        if (newOnes.length === 0) return prev;
+        return [...newOnes, ...prev].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      });
+      log('refresh ok, fetched=', fresh.length);
     } catch (e: any) {
       log('refresh err:', e?.message || e);
     }
