@@ -15,6 +15,7 @@ import { useFonts } from '@/hooks/useFonts';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { Colors } from '@/constants';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { NotificationsProvider } from '@/context/NotificationsContext';
 
 const ONBOARDING_KEY = 'vybe_onboarding_seen';
 
@@ -87,7 +88,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <RootNavigator />
+          <NotificationsProvider>
+            <RootNavigator />
+          </NotificationsProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

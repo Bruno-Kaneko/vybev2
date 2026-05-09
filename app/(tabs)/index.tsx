@@ -23,10 +23,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, deleteAllUserNotifications, getChats, notifyUser } from '@/lib/db';
+import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/context/NotificationsContext';
 import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import * as Location from 'expo-location';
@@ -60,14 +60,14 @@ export default function HomeScreen() {
     if (openMessages === '1') setMessagesOpen(true);
   }, [openMessages]);
   const [notifOpen, setNotifOpen] = useState(false);
-  const notifOpenRef = useRef(false);
   const [grupoesOpen, setGrupoesOpen] = useState(false);
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string; closesAtTs: number } | null>(null);
   const [groupChatOpen, setGroupChatOpen] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [notifs, setNotifs] = useState<DBNotification[]>([]);
   const [realChats, setRealChats] = useState<DBChat[]>([]);
+
+  const { notifications: notifs, pauseUpdates, resumeUpdates, dismiss, clearAll } = useNotifications();
 
   // Feed tabs
   const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
@@ -139,39 +139,18 @@ export default function HomeScreen() {
       else if (g.dx > 40) setActiveTab(t => t === 'geral' ? 'forYou' : t === 'forYou' ? 'seguindo' : 'seguindo');
     },
   })).current;
-  useEffect(() => { notifOpenRef.current = notifOpen; }, [notifOpen]);
-
   useEffect(() => {
-    if (notifOpen && authUserHome) {
-      deleteAllUserNotifications(authUserHome.id).catch(() => {});
+    if (notifOpen) {
+      pauseUpdates();
+      clearAll();
+    } else {
+      resumeUpdates();
     }
-  }, [notifOpen, authUserHome?.id]);
+  }, [notifOpen, pauseUpdates, resumeUpdates, clearAll]);
 
   useEffect(() => {
     if (!authUserHome) return;
-    const uid = authUserHome.id;
-
-    getNotifications(uid).then(setNotifs).catch(() => {});
-    getChats(uid).then(setRealChats).catch(() => {});
-
-    const ch = supabase
-      .channel(`notifications:${uid}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
-        () => {
-          if (!notifOpenRef.current) {
-            getNotifications(uid).then(setNotifs).catch(() => {});
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          getNotifications(uid).then(setNotifs).catch(() => {});
-        }
-      });
-
-    return () => { supabase.removeChannel(ch); };
+    getChats(authUserHome.id).then(setRealChats).catch(() => {});
   }, [authUserHome?.id]);
 
   const handleJoin = (g: { id: string; name: string; closesAtTs: number }) => {
@@ -232,17 +211,10 @@ export default function HomeScreen() {
       />
       <NotificationsDrawer
         visible={notifOpen}
-        onClose={() => {
-          setNotifOpen(false);
-          setNotifs([]);
-          if (authUserHome) getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
-        }}
+        onClose={() => setNotifOpen(false)}
         insets={insets}
         notifs={notifs}
-        onDismiss={(id) => {
-          setNotifs(prev => prev.filter(n => n.id !== id));
-          deleteNotification(id).catch(() => {});
-        }}
+        onDismiss={dismiss}
       />
       <GrupoesDrawer
         visible={grupoesOpen}
