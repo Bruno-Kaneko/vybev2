@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -172,7 +172,6 @@ export default function ChatScreen() {
             text: m.text,
             createdAt: new Date(m.created_at).getTime(),
           }));
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         }
       )
       .subscribe((status) => log('channel status=', status));
@@ -190,7 +189,6 @@ export default function ChatScreen() {
       setMessages([]);
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       setMessages([{ id: tempId, senderId: authUser.id, text: trimmed, createdAt: Date.now() }]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
       const { id: realId, created_at } = await sendMessage(newCid, authUser.id, trimmed);
       setMessages(prev => {
         if (!prev.some(m => m.id === tempId)) return prev;
@@ -217,7 +215,6 @@ export default function ChatScreen() {
         text: trimmed,
         createdAt: Date.now(),
       }]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       return;
     }
 
@@ -230,7 +227,6 @@ export default function ChatScreen() {
         text: trimmed,
         createdAt: Date.now(),
       }].sort(sortByTime));
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
       try {
         const { id: realId, created_at } = await sendMessage(chatId, authUser.id, trimmed);
         log('SEND ok temp=', tempId, '→ real=', realId);
@@ -259,6 +255,8 @@ export default function ChatScreen() {
 
   const isExpired = remaining <= 0;
   const isUrgent = remaining < 30 * 60 * 1000;
+
+  const reversedMessages = useMemo(() => messages.slice().reverse(), [messages]);
 
   return (
     <KeyboardAvoidingView
@@ -311,15 +309,14 @@ export default function ChatScreen() {
 
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={reversedMessages}
+          inverted
           style={styles.messagesFlat}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.messagesList}
           renderItem={({ item }) => (
             <MessageBubble msg={item} myId={authUser?.id ?? 'me'} />
           )}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
 
         <View style={[styles.inputRow, { paddingBottom: insets.bottom + 72 }]}>
@@ -409,7 +406,7 @@ const styles = StyleSheet.create({
   },
   expiryTextUrgent: { color: Colors.secondary },
   messagesFlat: { flex: 1 },
-  messagesList: { padding: Spacing.lg, gap: Spacing.sm, flexGrow: 1, justifyContent: 'flex-end' },
+  messagesList: { padding: Spacing.lg, gap: Spacing.sm },
   bubbleWrapper: { flexDirection: 'row', marginBottom: Spacing.xs },
   bubbleWrapperMe: { justifyContent: 'flex-end' },
   bubble: {
