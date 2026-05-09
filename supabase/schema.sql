@@ -299,6 +299,13 @@ do $$ begin
 end $$;
 
 do $$ begin
+  if not exists (select 1 from pg_policies where tablename='notifications' and policyname='notifications_update') then
+    create policy "notifications_update" on public.notifications
+      for update using (auth.uid() = user_id);
+  end if;
+end $$;
+
+do $$ begin
   if not exists (select 1 from pg_policies where tablename='notifications' and policyname='notifications_delete') then
     create policy "notifications_delete" on public.notifications
       for delete using (auth.uid() = user_id);

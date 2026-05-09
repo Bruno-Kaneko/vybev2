@@ -1,29 +1,26 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { deleteAllUserNotifications, deleteNotification, getNotifications } from '@/lib/db';
+import { deleteNotification, getNotifications, markAllNotificationsRead } from '@/lib/db';
 import type { DBNotification } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 
 const POLL_INTERVAL_MS = 15_000;
-const RECONNECT_DELAY_MS = 3_000;
 
 type NotificationsContextType = {
   notifications: DBNotification[];
-  pauseUpdates: () => void;
-  resumeUpdates: () => void;
+  unreadCount: number;
   refresh: () => Promise<void>;
+  markAllAsRead: () => Promise<void>;
   dismiss: (id: string) => void;
-  clearAll: () => Promise<void>;
 };
 
 const NotificationsContext = createContext<NotificationsContextType>({
   notifications: [],
-  pauseUpdates: () => {},
-  resumeUpdates: () => {},
+  unreadCount: 0,
   refresh: async () => {},
+  markAllAsRead: async () => {},
   dismiss: () => {},
-  clearAll: async () => {},
 });
 
 const log = (...args: any[]) => {
@@ -34,49 +31,42 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const { user } = useAuth();
   const userId = user?.id;
   const [notifications, setNotifications] = useState<DBNotification[]>([]);
-  const pausedRef = useRef(false);
   const userIdRef = useRef<string | undefined>(userId);
 
   useEffect(() => { userIdRef.current = userId; }, [userId]);
 
+  const unreadCount = useMemo(
+    () => notifications.filter(n => !n.read).length,
+    [notifications]
+  );
+
   const refresh = useCallback(async () => {
     const uid = userIdRef.current;
     if (!uid) { log('refresh skip: no user'); return; }
-    if (pausedRef.current) { log('refresh skip: paused'); return; }
     try {
       const data = await getNotifications(uid);
       setNotifications(data);
-      log('refresh ok, count=', data.length);
+      log('refresh ok, total=', data.length, 'unread=', data.filter(n => !n.read).length);
     } catch (e: any) {
       log('refresh err:', e?.message || e);
     }
   }, []);
 
-  const pauseUpdates = useCallback(() => {
-    pausedRef.current = true;
-    log('paused');
+  const markAllAsRead = useCallback(async () => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    setNotifications(prev => prev.map(n => n.read ? n : { ...n, read: true }));
+    try {
+      await markAllNotificationsRead(uid);
+      log('markAllAsRead ok');
+    } catch (e: any) {
+      log('markAllAsRead err:', e?.message);
+    }
   }, []);
-
-  const resumeUpdates = useCallback(() => {
-    pausedRef.current = false;
-    log('resumed → refresh');
-    refresh();
-  }, [refresh]);
 
   const dismiss = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
     deleteNotification(id).catch(e => log('dismiss err:', e?.message));
-  }, []);
-
-  const clearAll = useCallback(async () => {
-    const uid = userIdRef.current;
-    if (!uid) return;
-    try {
-      await deleteAllUserNotifications(uid);
-      log('clearAll ok');
-    } catch (e: any) {
-      log('clearAll err:', e?.message);
-    }
   }, []);
 
   useEffect(() => {
@@ -89,7 +79,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     log('SETUP user=', userId);
     refresh();
 
-    let channel = supabase
+    const channel = supabase
       .channel(`notifications:${userId}`)
       .on(
         'postgres_changes',
@@ -122,7 +112,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [userId, refresh]);
 
   return (
-    <NotificationsContext.Provider value={{ notifications, pauseUpdates, resumeUpdates, refresh, dismiss, clearAll }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, refresh, markAllAsRead, dismiss }}>
       {children}
     </NotificationsContext.Provider>
   );

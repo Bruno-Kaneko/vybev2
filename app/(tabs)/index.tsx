@@ -67,7 +67,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [realChats, setRealChats] = useState<DBChat[]>([]);
 
-  const { notifications: notifs, pauseUpdates, resumeUpdates, dismiss, clearAll } = useNotifications();
+  const { notifications: notifs, unreadCount, markAllAsRead, dismiss } = useNotifications();
 
   // Feed tabs
   const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
@@ -140,13 +140,8 @@ export default function HomeScreen() {
     },
   })).current;
   useEffect(() => {
-    if (notifOpen) {
-      pauseUpdates();
-      clearAll();
-    } else {
-      resumeUpdates();
-    }
-  }, [notifOpen, pauseUpdates, resumeUpdates, clearAll]);
+    if (notifOpen) markAllAsRead();
+  }, [notifOpen, markAllAsRead]);
 
   useEffect(() => {
     if (!authUserHome) return;
@@ -189,7 +184,7 @@ export default function HomeScreen() {
             onMessagesPress={() => setMessagesOpen(true)}
             onGrupoesPress={() => setGrupoesOpen(true)}
             onNotifPress={() => setNotifOpen(true)}
-            notifCount={notifs.filter(n => !n.read).length}
+            notifCount={unreadCount}
             activeTab={activeTab}
             onTabPress={setActiveTab}
           />
@@ -580,7 +575,7 @@ function NotificationsDrawer({
                   overshootRight={false}
                 >
                   <TouchableOpacity
-                    style={styles.drawerRow}
+                    style={[styles.drawerRow, !item.read && styles.drawerRowUnread]}
                     activeOpacity={0.75}
                     onPress={() => { onClose(); if (link) router.push(link as any); }}
                   >
@@ -588,12 +583,13 @@ function NotificationsDrawer({
                       <Text style={styles.notifEmoji}>{item.type === 'like' ? '❤️' : item.type === 'follow' ? '👤' : item.type === 'comment' ? '💬' : '✉️'}</Text>
                     </View>
                     <View style={styles.drawerRowInfo}>
-                      <Text style={styles.drawerRowName} numberOfLines={2}>
-                        <Text style={{ color: Colors.white }}>{actorName}</Text>
+                      <Text style={[styles.drawerRowName, item.read && styles.drawerRowNameRead]} numberOfLines={2}>
+                        <Text style={{ color: item.read ? Colors.textMuted : Colors.white }}>{actorName}</Text>
                         {' '}{item.text}
                       </Text>
                       <Text style={styles.drawerRowTime}>{timeStr}</Text>
                     </View>
+                    {!item.read && <View style={styles.notifUnreadDot} />}
                   </TouchableOpacity>
                 </ReanimatedSwipeable>
               );
@@ -1649,6 +1645,19 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  drawerRowUnread: {
+    backgroundColor: 'rgba(123,47,255,0.06)',
+  },
+  drawerRowNameRead: {
+    color: Colors.textDisabled,
+  },
+  notifUnreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.secondary,
+    marginLeft: Spacing.sm,
   },
   drawerRowJoined: {
     backgroundColor: 'rgba(255,45,120,0.06)',
