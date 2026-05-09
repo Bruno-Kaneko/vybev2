@@ -312,12 +312,14 @@ export default function ChatScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
+          style={styles.messagesFlat}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.messagesList}
           renderItem={({ item }) => (
             <MessageBubble msg={item} myId={authUser?.id ?? 'me'} />
           )}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
 
         <View style={[styles.inputRow, { paddingBottom: insets.bottom + 72 }]}>
@@ -406,6 +408,7 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   expiryTextUrgent: { color: Colors.secondary },
+  messagesFlat: { flex: 1 },
   messagesList: { padding: Spacing.lg, gap: Spacing.sm, flexGrow: 1, justifyContent: 'flex-end' },
   bubbleWrapper: { flexDirection: 'row', marginBottom: Spacing.xs },
   bubbleWrapperMe: { justifyContent: 'flex-end' },
