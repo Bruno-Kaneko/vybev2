@@ -286,6 +286,10 @@ do $$ begin
   alter publication supabase_realtime add table public.chats;
 exception when others then null; end $$;
 
+do $$ begin
+  alter publication supabase_realtime add table public.notifications;
+exception when others then null; end $$;
+
 -- ── SEED: cria perfil do usuário de teste ─────────
 insert into public.profiles (id, username, display_name)
 select id, split_part(email, '@', 1), split_part(email, '@', 1)
