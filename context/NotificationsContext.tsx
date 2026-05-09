@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { deleteNotification, getNotifications, markAllNotificationsRead } from '@/lib/db';
+import { deleteAllUserNotifications, deleteNotification, getNotifications } from '@/lib/db';
 import type { DBNotification } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 
@@ -64,8 +64,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     if (!uid) return;
     setNotifications(prev => prev.map(n => n.read ? n : { ...n, read: true }));
     try {
-      await markAllNotificationsRead(uid);
-      log('markAllAsRead ok');
+      await deleteAllUserNotifications(uid);
+      log('markAllAsRead ok (deleted)');
     } catch (e: any) {
       log('markAllAsRead err:', e?.message);
     }

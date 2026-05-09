@@ -604,11 +604,13 @@ export async function deleteAllUserNotifications(userId: string): Promise<void> 
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  await supabase.from('notifications').update({ read: true }).eq('id', id);
+  const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
+  if (error) throw error;
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-  await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+  const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+  if (error) throw error;
 }
 
 // ────────────────────────────────────────────────
