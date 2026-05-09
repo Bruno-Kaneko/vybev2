@@ -195,23 +195,28 @@ export default function MyProfileScreen() {
           </TouchableOpacity>
           <Text style={styles.displayName}>{displayName}</Text>
           <Text style={styles.username}>@{username}</Text>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => setStatusOpen(true)}
-            style={[
-              styles.statusBadge,
-              localStatus
-                ? { backgroundColor: STATUS_OPTIONS.find(o => o.value === localStatus)!.bg, borderColor: STATUS_OPTIONS.find(o => o.value === localStatus)!.color + '44' }
-                : { backgroundColor: Colors.surface, borderColor: Colors.border },
-            ]}
-          >
-            <Text style={[
-              styles.statusBadgeText,
-              localStatus ? { color: STATUS_OPTIONS.find(o => o.value === localStatus)!.color } : { color: Colors.textMuted },
-            ]}>
-              {localStatus ? STATUS_OPTIONS.find(o => o.value === localStatus)!.label : '+ Status de relacionamento'}
-            </Text>
-          </TouchableOpacity>
+          {(() => {
+            const statusOpt = localStatus ? STATUS_OPTIONS.find(o => o.value === localStatus) : undefined;
+            return (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setStatusOpen(true)}
+                style={[
+                  styles.statusBadge,
+                  statusOpt
+                    ? { backgroundColor: statusOpt.bg, borderColor: statusOpt.color + '44' }
+                    : { backgroundColor: Colors.surface, borderColor: Colors.border },
+                ]}
+              >
+                <Text style={[
+                  styles.statusBadgeText,
+                  statusOpt ? { color: statusOpt.color } : { color: Colors.textMuted },
+                ]}>
+                  {statusOpt ? statusOpt.label : '+ Status de relacionamento'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })()}
         </View>
 
         <View style={styles.statsRow}>

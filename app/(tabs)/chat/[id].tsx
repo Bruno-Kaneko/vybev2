@@ -12,16 +12,14 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, ChevronLeft, LockKeyhole, Timer } from 'lucide-react-native';
-import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
+import { Colors, FontFamily, FontSize, Spacing, Radius, CHAT_LIFETIME_MS } from '@/constants';
 import { MOCK_USERS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getOrCreateChat, createFreshChat, getMessages, sendMessage, getChatCreatedAt } from '@/lib/db';
+import { getOrCreateChat, createFreshChat, getMessages, sendMessage, getChatCreatedAt, getProfile } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import type { DBMessage } from '@/lib/db';
-
-const CHAT_LIFETIME_MS = 8 * 3600 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type MsgRow = { id: string; senderId: string; text: string; createdAt: number };
@@ -99,16 +97,14 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!isReal || !id) return;
-    import('@/lib/db').then(({ getProfile }) => {
-      getProfile(id).then(p => {
-        if (p) {
-          setOtherName(p.displayName ?? p.username);
-          setOtherAvatar(p.avatar ?? '');
-          setOtherLastSeen(p.lastSeenAt ?? null);
-          setOtherShowOnlineStatus(p.showOnlineStatus ?? true);
-        }
-      }).catch(() => {});
-    });
+    getProfile(id).then(p => {
+      if (p) {
+        setOtherName(p.displayName ?? p.username);
+        setOtherAvatar(p.avatar ?? '');
+        setOtherLastSeen(p.lastSeenAt ?? null);
+        setOtherShowOnlineStatus(p.showOnlineStatus ?? true);
+      }
+    }).catch(() => {});
   }, [id, isReal]);
 
   // Timer — for mock chats use mock data; for real chats use DB created_at
@@ -266,7 +262,7 @@ export default function ChatScreen() {
     >
       <View style={[styles.shell, { maxWidth: chatWidth }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)' as any)} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/chat' as any)} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
           <TouchableOpacity

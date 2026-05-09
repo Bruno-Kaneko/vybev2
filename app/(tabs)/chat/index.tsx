@@ -4,15 +4,13 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircle } from 'lucide-react-native';
 
-import { Colors, FontFamily, FontSize, Spacing } from '@/constants';
+import { Colors, FontFamily, FontSize, Spacing, CHAT_LIFETIME_MS } from '@/constants';
 import { Avatar, Badge } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { getChats } from '@/lib/db';
 import type { DBChat } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
-
-const CHAT_LIFETIME_MS = 8 * 3600 * 1000;
 
 type RowItem = {
   id: string;

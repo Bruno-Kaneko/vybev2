@@ -18,3 +18,5 @@ export const Radius = {
   xl: 20,
   full: 999,
 } as const;
+
+export const CHAT_LIFETIME_MS = 8 * 3600 * 1000;
