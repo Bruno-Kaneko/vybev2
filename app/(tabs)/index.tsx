@@ -150,17 +150,27 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!authUserHome) return;
     const uid = authUserHome.id;
+
     getNotifications(uid).then(setNotifs).catch(() => {});
     getChats(uid).then(setRealChats).catch(() => {});
 
     const ch = supabase
-      .channel(`home-notifs-${uid}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, () => {
-        if (!notifOpenRef.current) {
+      .channel(`notifications:${uid}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
+        () => {
+          if (!notifOpenRef.current) {
+            getNotifications(uid).then(setNotifs).catch(() => {});
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
           getNotifications(uid).then(setNotifs).catch(() => {});
         }
-      })
-      .subscribe();
+      });
+
     return () => { supabase.removeChannel(ch); };
   }, [authUserHome?.id]);
 
@@ -225,6 +235,7 @@ export default function HomeScreen() {
         onClose={() => {
           setNotifOpen(false);
           setNotifs([]);
+          if (authUserHome) getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
         }}
         insets={insets}
         notifs={notifs}
