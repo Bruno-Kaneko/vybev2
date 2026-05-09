@@ -596,6 +596,11 @@ export async function deleteNotification(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function deleteAllUserNotifications(userId: string): Promise<void> {
+  const { error } = await supabase.from('notifications').delete().eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function markNotificationRead(id: string): Promise<void> {
   await supabase.from('notifications').update({ read: true }).eq('id', id);
 }

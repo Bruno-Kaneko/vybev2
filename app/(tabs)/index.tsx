@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, markAllNotificationsRead, getChats, notifyUser } from '@/lib/db';
+import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getNotifications, deleteNotification, deleteAllUserNotifications, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -143,7 +143,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (notifOpen && authUserHome) {
-      markAllNotificationsRead(authUserHome.id).catch(() => {});
+      deleteAllUserNotifications(authUserHome.id).catch(() => {});
     }
   }, [notifOpen, authUserHome?.id]);
 
@@ -225,7 +225,6 @@ export default function HomeScreen() {
         onClose={() => {
           setNotifOpen(false);
           setNotifs([]);
-          if (authUserHome) getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
         }}
         insets={insets}
         notifs={notifs}
