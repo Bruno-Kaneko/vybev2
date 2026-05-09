@@ -60,6 +60,7 @@ export default function HomeScreen() {
     if (openMessages === '1') setMessagesOpen(true);
   }, [openMessages]);
   const [notifOpen, setNotifOpen] = useState(false);
+  const notifOpenRef = useRef(false);
   const [grupoesOpen, setGrupoesOpen] = useState(false);
   const [joinedGroup, setJoinedGroup] = useState<{ id: string; name: string; closesAtTs: number } | null>(null);
   const [groupChatOpen, setGroupChatOpen] = useState(false);
@@ -138,16 +139,26 @@ export default function HomeScreen() {
       else if (g.dx > 40) setActiveTab(t => t === 'geral' ? 'forYou' : t === 'forYou' ? 'seguindo' : 'seguindo');
     },
   })).current;
+  useEffect(() => { notifOpenRef.current = notifOpen; }, [notifOpen]);
+
+  useEffect(() => {
+    if (notifOpen && authUserHome) {
+      markAllNotificationsRead(authUserHome.id).catch(() => {});
+    }
+  }, [notifOpen, authUserHome?.id]);
+
   useEffect(() => {
     if (!authUserHome) return;
     const uid = authUserHome.id;
-    getNotifications(uid).then(data => setNotifs(data.filter(n => !n.read))).catch(() => {});
+    getNotifications(uid).then(setNotifs).catch(() => {});
     getChats(uid).then(setRealChats).catch(() => {});
 
     const ch = supabase
       .channel(`home-notifs-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, () => {
-        getNotifications(uid).then(data => setNotifs(data.filter(n => !n.read))).catch(() => {});
+        if (!notifOpenRef.current) {
+          getNotifications(uid).then(setNotifs).catch(() => {});
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -213,10 +224,8 @@ export default function HomeScreen() {
         visible={notifOpen}
         onClose={() => {
           setNotifOpen(false);
-          if (authUserHome && notifs.length > 0) {
-            markAllNotificationsRead(authUserHome.id).catch(() => {});
-            setNotifs([]);
-          }
+          setNotifs([]);
+          if (authUserHome) getNotifications(authUserHome.id).then(setNotifs).catch(() => {});
         }}
         insets={insets}
         notifs={notifs}
