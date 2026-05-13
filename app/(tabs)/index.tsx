@@ -140,12 +140,22 @@ export default function HomeScreen() {
       else if (g.dx > 40) setActiveTab(t => t === 'geral' ? 'forYou' : t === 'forYou' ? 'seguindo' : 'seguindo');
     },
   })).current;
+  // When the drawer opens we (a) snapshot which notifs were unread so they keep the purple
+  // highlight while it's open, and (b) immediately persist read=true so a quick reload won't
+  // resurface them. On close we mark read again to catch anything that arrived while open.
+  const [notifUnreadSnapshot, setNotifUnreadSnapshot] = useState<Set<string>>(() => new Set());
   const wasNotifOpen = useRef(false);
   useEffect(() => {
-    // Mark read when the drawer CLOSES, so the user can still see the unread (purple) state while it's open
-    if (wasNotifOpen.current && !notifOpen) markAllAsRead();
+    if (notifOpen && !wasNotifOpen.current) {
+      setNotifUnreadSnapshot(new Set(notifs.filter(n => !n.read).map(n => n.id)));
+      markAllAsRead();
+    } else if (!notifOpen && wasNotifOpen.current) {
+      markAllAsRead();
+      setNotifUnreadSnapshot(new Set());
+    }
     wasNotifOpen.current = notifOpen;
-  }, [notifOpen, markAllAsRead]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifOpen]);
 
   useEffect(() => {
     if (!authUserHome) return;
@@ -213,6 +223,7 @@ export default function HomeScreen() {
         onClose={() => setNotifOpen(false)}
         insets={insets}
         notifs={notifs}
+        unreadIds={notifUnreadSnapshot}
         onDismiss={dismiss}
       />
       <GrupoesDrawer
@@ -482,19 +493,70 @@ function MessagesDrawer({
 }
 
 
+type NotifDisplayItem =
+  | { kind: 'single'; key: string; n: DBNotification; unread: boolean }
+  | {
+      kind: 'message';
+      key: string;
+      actor: DBNotification['actor'];
+      actorId: string | null;
+      text: string;
+      created_at: string;
+      ids: string[];
+      total: number;
+      unreadCount: number;
+    };
+
 function NotificationsDrawer({
   visible,
   onClose,
   insets,
   notifs,
+  unreadIds,
   onDismiss,
 }: {
   visible: boolean;
   onClose: () => void;
   insets: { bottom: number; top: number };
   notifs: DBNotification[];
+  unreadIds: Set<string>;
   onDismiss: (id: string) => void;
 }) {
+  const isUnread = useCallback((n: DBNotification) => unreadIds.has(n.id) || !n.read, [unreadIds]);
+
+  const displayItems: NotifDisplayItem[] = useMemo(() => {
+    const out: NotifDisplayItem[] = [];
+    const byActor = new Map<string, Extract<NotifDisplayItem, { kind: 'message' }>>();
+    for (const n of notifs) {
+      if (n.type === 'message') {
+        const akey = n.actor_id ?? n.id;
+        const existing = byActor.get(akey);
+        if (existing) {
+          existing.ids.push(n.id);
+          existing.total += 1;
+          if (isUnread(n)) existing.unreadCount += 1;
+        } else {
+          const g: Extract<NotifDisplayItem, { kind: 'message' }> = {
+            kind: 'message',
+            key: `msg-${akey}`,
+            actor: n.actor,
+            actorId: n.actor_id,
+            text: n.text,
+            created_at: n.created_at,
+            ids: [n.id],
+            total: 1,
+            unreadCount: isUnread(n) ? 1 : 0,
+          };
+          byActor.set(akey, g);
+          out.push(g);
+        }
+      } else {
+        out.push({ kind: 'single', key: n.id, n, unread: isUnread(n) });
+      }
+    }
+    return out;
+  }, [notifs, isUnread]);
+
   const { height: SCREEN_H } = useWindowDimensions();
   const SNAP_HALF = Math.min(380, SCREEN_H * 0.55);
   const heightAnim = useRef(new Animated.Value(SNAP_HALF)).current;
@@ -548,8 +610,8 @@ function NotificationsDrawer({
             </TouchableOpacity>
           </View>
           <FlatList
-            data={notifs}
-            keyExtractor={item => item.id}
+            data={displayItems}
+            keyExtractor={item => item.key}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.notifListContent}
             ItemSeparatorComponent={() => <View style={styles.notifSeparator} />}
@@ -560,20 +622,29 @@ function NotificationsDrawer({
               </View>
             }
             renderItem={({ item }) => {
-              const diff = Date.now() - new Date(item.created_at).getTime();
+              const isMessage = item.kind === 'message';
+              const type = isMessage ? 'message' : item.n.type;
+              const actor = isMessage ? item.actor : item.n.actor;
+              const createdAt = isMessage ? item.created_at : item.n.created_at;
+              const unread = isMessage ? item.unreadCount > 0 : item.unread;
+              const username = actor?.username ?? actor?.display_name ?? 'alguem';
+              const diff = Date.now() - new Date(createdAt).getTime();
               const mins = Math.floor(diff / 60000);
               const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;
-              const username = item.actor?.username ?? item.actor?.display_name ?? 'alguem';
-              const isMessage = item.type === 'message';
-              const unread = !item.read;
-              const BadgeIcon = item.type === 'like' ? Heart : item.type === 'follow' ? UserPlus : item.type === 'comment' ? MessageCircle : Send;
+              const text = isMessage ? item.text : item.n.text;
+              const BadgeIcon = type === 'like' ? Heart : type === 'follow' ? UserPlus : type === 'comment' ? MessageCircle : Send;
               const link = isMessage
-                ? (item.actor_id ? `/(tabs)/chat/${item.actor_id}` : '/(tabs)/chat')
-                : item.post_id
-                  ? `/post/${item.post_id}`
-                  : item.actor_id
-                    ? `/profile/${item.actor_id}`
+                ? (item.actorId ? `/(tabs)/chat/${item.actorId}` : '/(tabs)/chat')
+                : item.n.post_id
+                  ? `/post/${item.n.post_id}`
+                  : item.n.actor_id
+                    ? `/profile/${item.n.actor_id}`
                     : null;
+              const showCount = isMessage && item.unreadCount > 1;
+              const onDelete = () => {
+                if (isMessage) item.ids.forEach(onDismiss);
+                else onDismiss(item.n.id);
+              };
               return (
                 <ReanimatedSwipeable
                   renderRightActions={() => (
@@ -581,7 +652,7 @@ function NotificationsDrawer({
                       <X color={Colors.white} size={18} strokeWidth={2.6} />
                     </View>
                   )}
-                  onSwipeableOpen={() => onDismiss(item.id)}
+                  onSwipeableOpen={onDelete}
                   rightThreshold={50}
                   overshootRight={false}
                 >
@@ -601,18 +672,24 @@ function NotificationsDrawer({
                     )}
                     {unread && <View style={styles.notifCardAccent} pointerEvents="none" />}
                     <View style={styles.notifAvatarWrap}>
-                      <Avatar uri={item.actor?.avatar_url ?? ''} size="md" />
+                      <Avatar uri={actor?.avatar_url ?? ''} size="md" />
                       <View style={styles.notifTypeBadge}>
-                        <BadgeIcon color={Colors.white} size={11} strokeWidth={2.6} fill={item.type === 'like' ? Colors.white : 'transparent'} />
+                        <BadgeIcon color={Colors.white} size={11} strokeWidth={2.6} fill={type === 'like' ? Colors.white : 'transparent'} />
                       </View>
                     </View>
                     <View style={styles.notifInfo}>
                       <Text style={styles.notifName} numberOfLines={1}>@{username}</Text>
-                      <Text style={[styles.notifSub, unread && styles.notifSubUnread]} numberOfLines={2}>{item.text}</Text>
+                      <Text style={[styles.notifSub, unread && styles.notifSubUnread]} numberOfLines={2}>{text}</Text>
                     </View>
                     <View style={styles.notifMeta}>
                       <Text style={styles.notifTime}>{timeStr}</Text>
-                      {unread && <View style={styles.notifUnreadDot} />}
+                      {showCount ? (
+                        <View style={styles.notifCountBadge}>
+                          <Text style={styles.notifCountText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
+                        </View>
+                      ) : unread ? (
+                        <View style={styles.notifUnreadDot} />
+                      ) : null}
                     </View>
                   </TouchableOpacity>
                 </ReanimatedSwipeable>
@@ -1681,6 +1758,20 @@ const styles = StyleSheet.create({
     height: 9,
     borderRadius: 5,
     backgroundColor: Colors.secondary,
+  },
+  notifCountBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifCountText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.xs,
+    color: Colors.white,
   },
   drawerRowJoined: {
     backgroundColor: 'rgba(255,45,120,0.06)',
