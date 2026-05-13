@@ -31,6 +31,22 @@ type NearbyPlace = {
 
 type LocationStatus = 'loading' | 'granted' | 'denied' | 'error';
 
+// getCurrentPositionAsync can hang on web (no timeout); race it so the UI never gets stuck on "loading"
+async function safeGetCoords(timeoutMs = 8000): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    return await Promise.race<{ latitude: number; longitude: number } | null>([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(p => ({ latitude: p.coords.latitude, longitude: p.coords.longitude })),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+function placeToNearby(p: (typeof MOCK_PLACES)[number], distanceM: number): NearbyPlace {
+  return { id: p.id, name: p.name, address: p.address, neighborhood: p.neighborhood ?? '', distanceM };
+}
+
 function LocationRow({ item, selected, onPress }: { item: NearbyPlace; selected: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[styles.locRow, selected && styles.locRowActive]} activeOpacity={0.8} onPress={onPress}>
@@ -134,37 +150,34 @@ export default function CameraScreen() {
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
   const [neighborhood, setNeighborhood] = useState<string | null>(null);
+  const [postError, setPostError] = useState<string | null>(null);
+
+  // Test account: unblock posting immediately (don't wait on geolocation / proximity)
+  useEffect(() => {
+    if (!bypassLocation) return;
+    setNearbyPlaces(prev => (prev.length ? prev : MOCK_PLACES.map(p => placeToNearby(p, 0))));
+    setSelectedPlace(prev => prev ?? (MOCK_PLACES[0] ? placeToNearby(MOCK_PLACES[0], 0) : null));
+    setLocationStatus(s => (s === 'loading' ? 'granted' : s));
+  }, [bypassLocation]);
 
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      let coords: { latitude: number; longitude: number } | null = null;
-      if (status === 'granted') {
-        try {
-          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          coords = pos.coords;
-        } catch { /* ignore — handled below */ }
-      }
-      if (!coords) {
-        if (bypassLocation) coords = FALLBACK_COORDS;
-        else { setLocationStatus(status === 'granted' ? 'error' : 'denied'); return; }
-      }
+      const realCoords = status === 'granted' ? await safeGetCoords() : null;
+      const coords = realCoords ?? (bypassLocation ? FALLBACK_COORDS : null);
+      if (!coords) { setLocationStatus(status === 'granted' ? 'error' : 'denied'); return; }
 
       const { latitude, longitude } = coords;
       const all = MOCK_PLACES
-        .map(p => ({
-          id: p.id,
-          name: p.name,
-          address: p.address,
-          neighborhood: p.neighborhood ?? '',
-          distanceM: Math.round(haversineKm(latitude, longitude, p.location.latitude, p.location.longitude) * 1000),
-        }))
+        .map(p => placeToNearby(p, Math.round(haversineKm(latitude, longitude, p.location.latitude, p.location.longitude) * 1000)))
         .sort((a, b) => a.distanceM - b.distanceM);
       // Conta de teste pode escolher qualquer lugar; demais usuários só os que estão a ≤500m
       const nearby = bypassLocation ? all : all.filter(p => p.distanceM <= MAX_POST_RADIUS_KM * 1000);
 
       setNearbyPlaces(nearby);
-      if (nearby.length > 0) setSelectedPlace(nearby[0]);
+      if (nearby.length > 0) {
+        setSelectedPlace(prev => (prev ? nearby.find(n => n.id === prev.id) ?? nearby[0] : nearby[0]));
+      }
 
       try {
         const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
@@ -179,22 +192,15 @@ export default function CameraScreen() {
 
   // Back from the post-setup screen returns to the live camera (Instagram-style); the X on the
   // camera itself exits to the previous tab.
-  const handleBack = () => setImage(null);
+  const handleBack = () => { setPostError(null); setImage(null); };
 
   const handlePost = async () => {
     if (!image || !selectedPlace || !user) return;
+    setPostError(null);
     setLoading(true);
     try {
-      let lat: number, lng: number;
-      try {
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-      } catch (e) {
-        if (!bypassLocation) throw e;
-        lat = FALLBACK_COORDS.latitude;
-        lng = FALLBACK_COORDS.longitude;
-      }
+      const coords = (await safeGetCoords()) ?? (bypassLocation ? FALLBACK_COORDS : null);
+      if (!coords) throw new Error('Não foi possível obter sua localização. Verifique o GPS.');
       const imageUrl = await uploadPostImage(user.id, image);
       await createPost({
         userId: user.id,
@@ -202,19 +208,21 @@ export default function CameraScreen() {
         caption: caption.trim() || undefined,
         placeName: selectedPlace.name,
         placeId: selectedPlace.id,
-        lat,
-        lng,
+        lat: coords.latitude,
+        lng: coords.longitude,
         durationHours: timer,
       });
       router.replace('/(tabs)');
     } catch (e: any) {
-      Alert.alert('Erro ao publicar', e?.message ?? 'Tente novamente.');
+      console.warn('[camera] post failed:', e);
+      setPostError(e?.message ?? 'Erro ao publicar. Tente novamente.');
+      if (Platform.OS !== 'web') Alert.alert('Erro ao publicar', e?.message ?? 'Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  const canPost = !!image && locationStatus === 'granted' && !!selectedPlace;
+  const canPost = !!image && !!selectedPlace && (bypassLocation || locationStatus === 'granted');
 
   const postButtonLabel = () => {
     if (!image) return 'Tire uma foto primeiro';
@@ -368,12 +376,17 @@ export default function CameraScreen() {
               fullWidth
               size="lg"
             />
-            {canPost && (
+            {postError ? (
+              <View style={styles.readyRow}>
+                <AlertCircle color={Colors.urgent} size={16} strokeWidth={2.2} />
+                <Text style={[styles.readyText, { color: Colors.urgent }]}>{postError}</Text>
+              </View>
+            ) : canPost ? (
               <View style={styles.readyRow}>
                 <Send color={Colors.secondary} size={16} strokeWidth={2.2} />
                 <Text style={styles.readyText}>Tudo pronto para publicar</Text>
               </View>
-            )}
+            ) : null}
           </View>
         </View>
       </ScrollView>
