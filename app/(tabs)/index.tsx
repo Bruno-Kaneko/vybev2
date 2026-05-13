@@ -633,7 +633,7 @@ function NotificationsDrawer({
               const actor = isMessage ? item.actor : item.n.actor;
               const createdAt = isMessage ? item.created_at : item.n.created_at;
               const unread = isMessage ? item.unreadCount > 0 : item.unread;
-              const username = actor?.username ?? actor?.display_name ?? 'alguem';
+              const username = (actor?.username ?? actor?.display_name ?? 'alguem').replace(/^@+/, '');
               const diff = Date.now() - new Date(createdAt).getTime();
               const mins = Math.floor(diff / 60000);
               const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;

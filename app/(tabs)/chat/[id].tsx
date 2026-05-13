@@ -262,7 +262,7 @@ export default function ChatScreen() {
     >
       <View style={[styles.shell, { maxWidth: chatWidth }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)/chat' as any)} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
           <TouchableOpacity
