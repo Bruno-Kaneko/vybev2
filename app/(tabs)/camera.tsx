@@ -8,26 +8,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle, AlignLeft, SwitchCamera } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_PLACES } from '@/constants/MockData';
 import { VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { uploadPostImage, createPost, haversineKm } from '@/lib/db';
+import { uploadPostImage, createPost } from '@/lib/db';
+import { searchNearbyPlaces, type NearbyPlace } from '@/lib/places';
 import type { TimerDuration } from '@/types';
 
 const TIMER_OPTIONS: TimerDuration[] = [2, 4, 6];
 const MAX_POST_RADIUS_KM = 0.5;
+const SEARCH_RADIUS_M = 1000; // busca num raio maior, filtra os de ≤500m pra postar
 // Contas de teste — podem postar de qualquer lugar (sem precisar estar perto de um lugar cadastrado)
 const TEST_POST_BYPASS_EMAILS = ['michel.lepine7@gmail.com'];
 const FALLBACK_COORDS = { latitude: -23.5505, longitude: -46.6333 }; // centro de São Paulo
-
-type NearbyPlace = {
-  id: string;
-  name: string;
-  address: string;
-  neighborhood: string;
-  distanceM: number;
-};
 
 type LocationStatus = 'loading' | 'granted' | 'denied' | 'error';
 
@@ -41,10 +34,6 @@ async function safeGetCoords(timeoutMs = 8000): Promise<{ latitude: number; long
   } catch {
     return null;
   }
-}
-
-function placeToNearby(p: (typeof MOCK_PLACES)[number], distanceM: number): NearbyPlace {
-  return { id: p.id, name: p.name, address: p.address, neighborhood: p.neighborhood ?? '', distanceM };
 }
 
 function LocationRow({ item, selected, onPress }: { item: NearbyPlace; selected: boolean; onPress: () => void }) {
@@ -152,14 +141,6 @@ export default function CameraScreen() {
   const [neighborhood, setNeighborhood] = useState<string | null>(null);
   const [postError, setPostError] = useState<string | null>(null);
 
-  // Test account: unblock posting immediately (don't wait on geolocation / proximity)
-  useEffect(() => {
-    if (!bypassLocation) return;
-    setNearbyPlaces(prev => (prev.length ? prev : MOCK_PLACES.map(p => placeToNearby(p, 0))));
-    setSelectedPlace(prev => prev ?? (MOCK_PLACES[0] ? placeToNearby(MOCK_PLACES[0], 0) : null));
-    setLocationStatus(s => (s === 'loading' ? 'granted' : s));
-  }, [bypassLocation]);
-
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -168,9 +149,9 @@ export default function CameraScreen() {
       if (!coords) { setLocationStatus(status === 'granted' ? 'error' : 'denied'); return; }
 
       const { latitude, longitude } = coords;
-      const all = MOCK_PLACES
-        .map(p => placeToNearby(p, Math.round(haversineKm(latitude, longitude, p.location.latitude, p.location.longitude) * 1000)))
-        .sort((a, b) => a.distanceM - b.distanceM);
+
+      // Busca lugares reais via Google Places API
+      const all = await searchNearbyPlaces(latitude, longitude, SEARCH_RADIUS_M);
       // Conta de teste pode escolher qualquer lugar; demais usuários só os que estão a ≤500m
       const nearby = bypassLocation ? all : all.filter(p => p.distanceM <= MAX_POST_RADIUS_KM * 1000);
 
