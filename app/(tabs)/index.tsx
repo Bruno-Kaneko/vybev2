@@ -20,7 +20,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, UserPlus, Users, X } from 'lucide-react-native';
+import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
 import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getChats, notifyUser } from '@/lib/db';
@@ -557,11 +557,9 @@ function NotificationsDrawer({
             renderItem={({ item }) => {
               const diff = Date.now() - new Date(item.created_at).getTime();
               const mins = Math.floor(diff / 60000);
-              const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;
+              const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins} min` : mins < 1440 ? `${Math.floor(mins / 60)} h` : `${Math.floor(mins / 1440)} d`;
               const actorName = item.actor?.display_name ?? item.actor?.username ?? 'Alguém';
               const isMessage = item.type === 'message';
-              const accent = item.type === 'like' ? Colors.secondary : item.type === 'follow' ? Colors.secondary : Colors.primary;
-              const BadgeIcon = item.type === 'like' ? Heart : item.type === 'follow' ? UserPlus : item.type === 'comment' ? MessageCircle : Send;
               const link = isMessage
                 ? (item.actor_id ? `/(tabs)/chat/${item.actor_id}` : '/(tabs)/chat')
                 : item.post_id
@@ -585,26 +583,15 @@ function NotificationsDrawer({
                     activeOpacity={0.7}
                     onPress={() => { onClose(); if (link) router.push(link as any); }}
                   >
-                    <View style={styles.notifAvatarWrap}>
-                      <Avatar uri={item.actor?.avatar_url ?? ''} size="md" />
-                      <View style={[styles.notifTypeBadge, { backgroundColor: accent }]}>
-                        <BadgeIcon color={Colors.white} size={11} strokeWidth={2.6} fill={item.type === 'like' ? Colors.white : 'transparent'} />
-                      </View>
-                    </View>
+                    <Avatar uri={item.actor?.avatar_url ?? ''} size="md" />
                     <View style={styles.notifInfo}>
-                      <View style={styles.notifTopRow}>
-                        <Text style={styles.notifName} numberOfLines={1}>{actorName}</Text>
-                        <Text style={styles.notifTime}>{timeStr}</Text>
-                      </View>
-                      {isMessage ? (
-                        <View style={[styles.notifMsgBubble, !item.read && styles.notifMsgBubbleUnread]}>
-                          <Text style={styles.notifMsgText} numberOfLines={3}>{item.text}</Text>
-                        </View>
-                      ) : (
-                        <Text style={styles.notifAction} numberOfLines={2}>{item.text}</Text>
-                      )}
+                      <Text style={styles.notifName} numberOfLines={1}>{actorName}</Text>
+                      <Text style={[styles.notifSub, isMessage && styles.notifSubMessage]} numberOfLines={2}>
+                        {item.text}
+                        <Text style={styles.notifTime}>{`  ·  ${timeStr}`}</Text>
+                      </Text>
                     </View>
-                    {!item.read && <View style={[styles.notifUnreadDot, { backgroundColor: accent }]} />}
+                    {!item.read && <View style={styles.notifUnreadDot} />}
                   </TouchableOpacity>
                 </ReanimatedSwipeable>
               );
@@ -1730,7 +1717,7 @@ const styles = StyleSheet.create({
   },
   notifRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     gap: Spacing.md,
@@ -1744,77 +1731,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
     marginLeft: Spacing.xl + 44 + Spacing.md,
   },
-  notifAvatarWrap: {
-    position: 'relative',
-    flexShrink: 0,
-  },
-  notifTypeBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 19,
-    height: 19,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.surface,
-  },
   notifInfo: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
-    paddingTop: 1,
-  },
-  notifTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
+    gap: 3,
   },
   notifName: {
-    flex: 1,
     fontFamily: FontFamily.bodySemiBold,
     fontSize: FontSize.md,
     color: Colors.white,
   },
-  notifTime: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.xs,
-    color: Colors.textDim,
-  },
-  notifAction: {
+  notifSub: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
     color: Colors.textDim,
     lineHeight: 18,
   },
-  notifMsgBubble: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: Radius.md,
-    borderTopLeftRadius: 4,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderLeftWidth: 2.5,
-    borderLeftColor: Colors.border,
+  notifSubMessage: {
+    fontFamily: FontFamily.bodyMedium,
+    color: '#CFCFCF',
   },
-  notifMsgBubbleUnread: {
-    backgroundColor: 'rgba(155,93,229,0.12)',
-    borderLeftColor: Colors.primary,
-  },
-  notifMsgText: {
+  notifTime: {
     fontFamily: FontFamily.body,
-    fontSize: FontSize.md,
-    color: '#E8E8E8',
-    lineHeight: 20,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
   },
   notifSwipeDelete: {
     width: 72,
     backgroundColor: Colors.urgent,
     alignItems: 'center',
     justifyContent: 'center',
-    borderTopRightRadius: Radius.lg,
-    borderBottomRightRadius: Radius.lg,
   },
   notifEmpty: {
     paddingVertical: Spacing['2xl'],
