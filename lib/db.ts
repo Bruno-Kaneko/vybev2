@@ -42,10 +42,9 @@ export type DBPost = {
   lng: number;
   expires_at: string;
   created_at: string;
-  fire_count: number;
-  heart_count: number;
-  comment_count: number;
-  profiles: DBProfile;
+  fire_count: number | null;
+  heart_count: number | null;
+  comment_count: number | null;
 };
 
 export type DBMessage = {
@@ -81,10 +80,10 @@ export function mapProfile(p: DBProfile): User {
     avatar: p.avatar_url ?? '',
     bio: p.bio ?? undefined,
     instagram: p.instagram ?? undefined,
-    points: p.points,
-    followers: p.follower_count,
-    following: p.following_count,
-    createdAt: new Date(p.created_at).getTime(),
+    points: p.points ?? 0,
+    followers: p.follower_count ?? 0,
+    following: p.following_count ?? 0,
+    createdAt: p.created_at ? new Date(p.created_at).getTime() : Date.now(),
     relationshipStatus: (p.relationship_status as any) ?? undefined,
     isPrivate: p.is_private ?? false,
     lastSeenAt: p.last_seen_at ? new Date(p.last_seen_at).getTime() : null,
@@ -92,11 +91,15 @@ export function mapProfile(p: DBProfile): User {
   };
 }
 
-function mapPost(row: DBPost): Post {
+function placeholderUser(id: string): User {
+  return { id, username: 'usuario', displayName: 'Usuário', avatar: '', points: 0, followers: 0, following: 0, createdAt: Date.now(), isPrivate: false, lastSeenAt: null, showOnlineStatus: true };
+}
+
+function mapPost(row: DBPost, user: User): Post {
   return {
     id: row.id,
     userId: row.user_id,
-    user: mapProfile(row.profiles),
+    user,
     imageUrl: row.image_url,
     caption: row.caption ?? undefined,
     placeName: row.place_name,
@@ -104,19 +107,30 @@ function mapPost(row: DBPost): Post {
     location: { latitude: row.lat, longitude: row.lng },
     expiresAt: new Date(row.expires_at).getTime(),
     createdAt: new Date(row.created_at).getTime(),
-    reactions: { fire: row.fire_count, heart: row.heart_count },
-    commentCount: row.comment_count,
+    reactions: { fire: row.fire_count ?? 0, heart: row.heart_count ?? 0 },
+    commentCount: row.comment_count ?? 0,
   };
 }
 
-const POST_SELECT = `
-  id, user_id, image_url, caption, place_name, place_id,
-  lat, lng, expires_at, created_at, fire_count, heart_count, comment_count,
-  profiles (
-    id, username, display_name, avatar_url, bio, instagram, points,
-    relationship_status, follower_count, following_count, created_at
-  )
-`;
+// Plain post columns — we resolve the author profile separately (no PostgREST FK embed needed)
+const POST_COLS = 'id, user_id, image_url, caption, place_name, place_id, lat, lng, expires_at, created_at, fire_count, heart_count, comment_count';
+
+async function attachProfiles(rows: DBPost[]): Promise<Post[]> {
+  if (rows.length === 0) return [];
+  const ids = [...new Set(rows.map(r => r.user_id))];
+  const userMap = new Map<string, User>();
+  try {
+    const { data } = await supabase.from('profiles').select('*').in('id', ids);
+    for (const p of (data ?? []) as DBProfile[]) userMap.set(p.id, mapProfile(p));
+  } catch { /* fall back to placeholders below */ }
+  return rows.map(r => mapPost(r, userMap.get(r.user_id) ?? placeholderUser(r.user_id)));
+}
+
+async function fetchPosts(build: (q: any) => any): Promise<Post[]> {
+  const { data, error } = await build(supabase.from('posts').select(POST_COLS));
+  if (error) { if (__DEV__) console.warn('[db] fetchPosts error:', error.message); return []; }
+  return attachProfiles((data ?? []) as DBPost[]);
+}
 
 // ────────────────────────────────────────────────
 // PROFILE
@@ -150,24 +164,16 @@ export async function ensureProfile(userId: string, email: string, username?: st
 // ────────────────────────────────────────────────
 
 export async function getFeedPosts(): Promise<Post[]> {
-  const { data, error } = await supabase
-    .from('posts')
-    .select(POST_SELECT)
+  return fetchPosts(q => q
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
-    .limit(50);
-  if (error || !data) return [];
-  return (data as unknown as DBPost[]).map(mapPost);
+    .limit(50));
 }
 
 export async function getUserPosts(userId: string): Promise<Post[]> {
-  const { data, error } = await supabase
-    .from('posts')
-    .select(POST_SELECT)
+  return fetchPosts(q => q
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  if (error || !data) return [];
-  return (data as unknown as DBPost[]).map(mapPost);
+    .order('created_at', { ascending: false }));
 }
 
 export async function getActivePostLocations(): Promise<Array<{ lat: number; lng: number }>> {
@@ -381,11 +387,12 @@ export type DBComment = {
 export async function getPost(postId: string): Promise<Post | null> {
   const { data, error } = await supabase
     .from('posts')
-    .select(POST_SELECT)
+    .select(POST_COLS)
     .eq('id', postId)
     .single();
   if (error || !data) return null;
-  return mapPost(data as unknown as DBPost);
+  const [post] = await attachProfiles([data as unknown as DBPost]);
+  return post ?? null;
 }
 
 export async function getComments(postId: string): Promise<DBComment[]> {
@@ -658,15 +665,11 @@ export async function getFollowingIds(userId: string): Promise<Set<string>> {
 export async function getFollowingFeedPosts(userId: string): Promise<Post[]> {
   const ids = await getFollowingIds(userId);
   if (ids.size === 0) return [];
-  const { data, error } = await supabase
-    .from('posts')
-    .select(POST_SELECT)
+  return fetchPosts(q => q
     .in('user_id', [...ids])
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
-    .limit(50);
-  if (error || !data) return [];
-  return (data as unknown as DBPost[]).map(mapPost);
+    .limit(50));
 }
 
 // ────────────────────────────────────────────────
@@ -766,15 +769,11 @@ export async function getPlace(placeId: string): Promise<DBPlace | null> {
 }
 
 export async function getPlaceActivePosts(placeId: string): Promise<Post[]> {
-  const { data } = await supabase
-    .from('posts')
-    .select(POST_SELECT)
+  return fetchPosts(q => q
     .eq('place_id', placeId)
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
-    .limit(30);
-  if (!data) return [];
-  return (data as unknown as DBPost[]).map(mapPost);
+    .limit(30));
 }
 
 export async function submitPlaceReport(
