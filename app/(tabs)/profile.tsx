@@ -16,9 +16,9 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Grid3X3, LogOut, MapPin, Settings } from 'lucide-react-native';
+import { Camera, Grid3X3, LogOut, MapPin, Settings, Trash2 } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { getUserPosts, getProfile, updateRelationshipStatus } from '@/lib/db';
+import { getUserPosts, getProfile, updateRelationshipStatus, deletePost } from '@/lib/db';
 import type { Post } from '@/types';
 import { Avatar, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -51,6 +51,25 @@ export default function MyProfileScreen() {
   const [localStatus, setLocalStatus] = useState<RelationshipStatus | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [profileStats, setProfileStats] = useState({ followers: 0, following: 0, points: 0 });
+  const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeletePost = async () => {
+    if (!postToDelete) return;
+    setDeleting(true);
+    try {
+      const target = postToDelete;
+      await deletePost(target.id, target.imageUrl);
+      setMyPosts(prev => prev.filter(p => p.id !== target.id));
+      setPostToDelete(null);
+      setMessage('Post excluído');
+      setTimeout(() => setMessage(''), 2500);
+    } catch (e: any) {
+      setMessage(e?.message ?? 'Erro ao excluir o post.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const thumbGap = Spacing.xs;
   const contentWidth = Math.min(responsive.contentMaxWidth, responsive.width - responsive.pagePadding * 2);
@@ -322,6 +341,26 @@ export default function MyProfileScreen() {
           </TouchableOpacity>
         </Modal>
 
+        <Modal visible={!!postToDelete} transparent animationType="fade" onRequestClose={() => !deleting && setPostToDelete(null)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => !deleting && setPostToDelete(null)}>
+            <View style={[styles.modalSheet, styles.logoutSheet]} onStartShouldSetResponder={() => true}>
+              <Text style={styles.modalTitle}>Excluir post?</Text>
+              <Text style={styles.logoutSubtitle}>Essa ação não pode ser desfeita.</Text>
+              <View style={styles.modalActions}>
+                <TouchableOpacity onPress={() => setPostToDelete(null)} style={styles.cancelBtn} disabled={deleting}>
+                  <Text style={styles.cancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDeletePost} style={styles.logoutConfirmBtn} disabled={deleting}>
+                  {deleting
+                    ? <ActivityIndicator color={Colors.white} />
+                    : <Text style={styles.logoutConfirmText}>Excluir</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
         <Modal visible={logoutOpen} transparent animationType="fade" onRequestClose={() => setLogoutOpen(false)}>
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLogoutOpen(false)}>
             <View style={[styles.modalSheet, styles.logoutSheet]} onStartShouldSetResponder={() => true}>
@@ -366,6 +405,8 @@ export default function MyProfileScreen() {
                 key={post.id}
                 style={[styles.postThumb, { width: thumbSize, height: thumbSize * 1.28 }]}
                 onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+                onLongPress={() => setPostToDelete(post)}
+                delayLongPress={350}
                 activeOpacity={0.85}
               >
                 <Image source={{ uri: post.imageUrl }} style={styles.postThumbImg} resizeMode="cover" />
@@ -373,6 +414,14 @@ export default function MyProfileScreen() {
                   colors={['transparent', 'rgba(10,10,15,0.72)']}
                   style={StyleSheet.absoluteFill}
                 />
+                <TouchableOpacity
+                  style={styles.postThumbDelete}
+                  onPress={() => setPostToDelete(post)}
+                  hitSlop={{ top: 6, left: 6, bottom: 6, right: 6 }}
+                  activeOpacity={0.7}
+                >
+                  <Trash2 color={Colors.white} size={13} strokeWidth={2.4} />
+                </TouchableOpacity>
                 <View style={styles.thumbMeta}>
                   <MapPin color={Colors.textMuted} size={11} strokeWidth={2.2} />
                   <Text style={styles.postThumbPlace} numberOfLines={1}>{post.placeName}</Text>
@@ -594,6 +643,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
+  },
+  postThumbDelete: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   postThumbPlace: {
     flex: 1,

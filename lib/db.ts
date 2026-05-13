@@ -237,6 +237,20 @@ export async function createPost(params: {
   return data.id as string;
 }
 
+export async function deletePost(postId: string, imageUrl?: string): Promise<void> {
+  const { error } = await supabase.from('posts').delete().eq('id', postId);
+  if (error) throw error;
+  // Best-effort: clean up the image from storage too (no error if it fails)
+  if (imageUrl) {
+    const marker = '/posts/';
+    const idx = imageUrl.indexOf(marker);
+    if (idx !== -1) {
+      const path = imageUrl.slice(idx + marker.length).split('?')[0];
+      supabase.storage.from('posts').remove([path]).catch(() => {});
+    }
+  }
+}
+
 // ────────────────────────────────────────────────
 // FOLLOWS
 // ────────────────────────────────────────────────
