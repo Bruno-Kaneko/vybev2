@@ -82,7 +82,10 @@ export default function MyProfileScreen() {
     getUserPosts(user.id).then(p => { if (!cancelled) setMyPosts(p); }).catch(() => {});
     getProfile(user.id).then(p => {
       if (cancelled) return;
-      if (p?.relationshipStatus) setLocalStatus(p.relationshipStatus as any);
+      const validStatuses: RelationshipStatus[] = ['solteiro', 'namorando', 'ficando', 'curtindo'];
+      if (p?.relationshipStatus && validStatuses.includes(p.relationshipStatus as RelationshipStatus)) {
+        setLocalStatus(p.relationshipStatus as RelationshipStatus);
+      }
       if (p?.bio) setLocalBio(p.bio);
       setProfileStats({ followers: p?.followers ?? 0, following: p?.following ?? 0, points: p?.points ?? 0 });
     }).catch(() => {});
