@@ -17,6 +17,9 @@ import type { TimerDuration } from '@/types';
 
 const TIMER_OPTIONS: TimerDuration[] = [2, 4, 6];
 const MAX_POST_RADIUS_KM = 0.5;
+// Contas de teste — podem postar de qualquer lugar (sem precisar estar perto de um lugar cadastrado)
+const TEST_POST_BYPASS_EMAILS = ['michel.lepine7@gmail.com'];
+const FALLBACK_COORDS = { latitude: -23.5505, longitude: -46.6333 }; // centro de São Paulo
 
 type NearbyPlace = {
   id: string;
@@ -120,6 +123,7 @@ export default function CameraScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const { user } = useAuth();
+  const bypassLocation = !!user?.email && TEST_POST_BYPASS_EMAILS.includes(user.email.toLowerCase());
   const [image, setImage] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
   const [timer, setTimer] = useState<TimerDuration>(4);
@@ -134,42 +138,44 @@ export default function CameraScreen() {
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationStatus('denied');
-        return;
+      let coords: { latitude: number; longitude: number } | null = null;
+      if (status === 'granted') {
+        try {
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          coords = pos.coords;
+        } catch { /* ignore — handled below */ }
       }
+      if (!coords) {
+        if (bypassLocation) coords = FALLBACK_COORDS;
+        else { setLocationStatus(status === 'granted' ? 'error' : 'denied'); return; }
+      }
+
+      const { latitude, longitude } = coords;
+      const all = MOCK_PLACES
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          address: p.address,
+          neighborhood: p.neighborhood ?? '',
+          distanceM: Math.round(haversineKm(latitude, longitude, p.location.latitude, p.location.longitude) * 1000),
+        }))
+        .sort((a, b) => a.distanceM - b.distanceM);
+      // Conta de teste pode escolher qualquer lugar; demais usuários só os que estão a ≤500m
+      const nearby = bypassLocation ? all : all.filter(p => p.distanceM <= MAX_POST_RADIUS_KM * 1000);
+
+      setNearbyPlaces(nearby);
+      if (nearby.length > 0) setSelectedPlace(nearby[0]);
 
       try {
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const { latitude, longitude } = pos.coords;
-
-        const nearby = MOCK_PLACES
-          .map(p => ({
-            id: p.id,
-            name: p.name,
-            address: p.address,
-            neighborhood: p.neighborhood ?? '',
-            distanceM: Math.round(haversineKm(latitude, longitude, p.location.latitude, p.location.longitude) * 1000),
-          }))
-          .filter(p => p.distanceM <= MAX_POST_RADIUS_KM * 1000)
-          .sort((a, b) => a.distanceM - b.distanceM);
-
-        setNearbyPlaces(nearby);
-        if (nearby.length > 0) setSelectedPlace(nearby[0]);
-
-        try {
-          const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
-          setNeighborhood(geo?.district ?? geo?.subregion ?? geo?.city ?? null);
-        } catch {
-          setNeighborhood(nearby[0]?.neighborhood ?? null);
-        }
-
-        setLocationStatus('granted');
+        const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
+        setNeighborhood(geo?.district ?? geo?.subregion ?? geo?.city ?? null);
       } catch {
-        setLocationStatus('error');
+        setNeighborhood(nearby[0]?.neighborhood ?? null);
       }
+
+      setLocationStatus('granted');
     })();
-  }, []);
+  }, [bypassLocation]);
 
   // Back from the post-setup screen returns to the live camera (Instagram-style); the X on the
   // camera itself exits to the previous tab.
@@ -179,7 +185,16 @@ export default function CameraScreen() {
     if (!image || !selectedPlace || !user) return;
     setLoading(true);
     try {
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      let lat: number, lng: number;
+      try {
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch (e) {
+        if (!bypassLocation) throw e;
+        lat = FALLBACK_COORDS.latitude;
+        lng = FALLBACK_COORDS.longitude;
+      }
       const imageUrl = await uploadPostImage(user.id, image);
       await createPost({
         userId: user.id,
@@ -187,8 +202,8 @@ export default function CameraScreen() {
         caption: caption.trim() || undefined,
         placeName: selectedPlace.name,
         placeId: selectedPlace.id,
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
+        lat,
+        lng,
         durationHours: timer,
       });
       router.replace('/(tabs)');
@@ -292,6 +307,10 @@ export default function CameraScreen() {
               <Text style={styles.sectionTitle}>Localização</Text>
             </View>
 
+            {bypassLocation && (
+              <Text style={styles.testModeHint}>🧪 Modo teste: você pode postar de qualquer lugar</Text>
+            )}
+
             {locationStatus === 'loading' ? (
               <View style={styles.locationCard}>
                 <ActivityIndicator size="small" color={Colors.secondary} />
@@ -333,7 +352,7 @@ export default function CameraScreen() {
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.locationName} numberOfLines={1}>{selectedPlace.name}</Text>
                   <Text style={styles.locationSub} numberOfLines={1}>
-                    {selectedPlace.distanceM}m de você{nearbyPlaces.length > 1 ? ' · Toque para alterar' : ''}
+                    {selectedPlace.distanceM < 1000 ? `${selectedPlace.distanceM}m` : `${(selectedPlace.distanceM / 1000).toFixed(1)}km`} de você{nearbyPlaces.length > 1 ? ' · Toque para alterar' : ''}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -559,6 +578,11 @@ const styles = StyleSheet.create({
     color: Colors.text,
     minHeight: 72,
     textAlignVertical: 'top',
+  },
+  testModeHint: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.xs,
+    color: Colors.secondary,
   },
   locationCard: {
     flexDirection: 'row',
