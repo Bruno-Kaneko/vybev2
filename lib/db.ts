@@ -579,13 +579,14 @@ export type DBNotification = {
   actor: { id: string; username: string; display_name: string | null; avatar_url: string | null } | null;
 };
 
+export const NOTIFICATIONS_TTL_MS = 4 * 60 * 60 * 1000;
+
 export async function getNotifications(userId: string): Promise<DBNotification[]> {
-  const cutoff = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - NOTIFICATIONS_TTL_MS).toISOString();
   const { data, error } = await supabase
     .from('notifications')
     .select('id, user_id, actor_id, type, post_id, text, read, created_at, actor:profiles!actor_id(id, username, display_name, avatar_url)')
     .eq('user_id', userId)
-    .eq('read', false)
     .gte('created_at', cutoff)
     .order('created_at', { ascending: false })
     .limit(50);

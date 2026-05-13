@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { deleteAllUserNotifications, deleteNotification, getNotifications } from '@/lib/db';
+import { deleteNotification, getNotifications, markAllNotificationsRead, NOTIFICATIONS_TTL_MS } from '@/lib/db';
 import type { DBNotification } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 
@@ -45,13 +45,16 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     if (!uid) { log('refresh skip: no user'); return; }
     try {
       const fresh = await getNotifications(uid);
+      const cutoff = Date.now() - NOTIFICATIONS_TTL_MS;
       setNotifications(prev => {
-        const existing = new Set(prev.map(p => p.id));
-        const newOnes = fresh.filter(f => !existing.has(f.id));
-        if (newOnes.length === 0) return prev;
-        return [...newOnes, ...prev].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        const readIds = new Set(prev.filter(p => p.read).map(p => p.id));
+        const merged = fresh
+          .filter(f => new Date(f.created_at).getTime() >= cutoff)
+          .map(f => (readIds.has(f.id) && !f.read ? { ...f, read: true } : f))
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        // avoid needless re-render if nothing changed
+        if (merged.length === prev.length && merged.every((m, i) => prev[i]?.id === m.id && prev[i]?.read === m.read)) return prev;
+        return merged;
       });
       log('refresh ok, fetched=', fresh.length);
     } catch (e: any) {
@@ -64,8 +67,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     if (!uid) return;
     setNotifications(prev => prev.map(n => n.read ? n : { ...n, read: true }));
     try {
-      await deleteAllUserNotifications(uid);
-      log('markAllAsRead ok (deleted)');
+      await markAllNotificationsRead(uid);
+      log('markAllAsRead ok');
     } catch (e: any) {
       log('markAllAsRead err:', e?.message);
     }

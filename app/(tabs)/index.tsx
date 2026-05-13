@@ -20,7 +20,8 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, Users, X } from 'lucide-react-native';
+import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, UserPlus, Users, X } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
 import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getChats, notifyUser } from '@/lib/db';
@@ -139,8 +140,11 @@ export default function HomeScreen() {
       else if (g.dx > 40) setActiveTab(t => t === 'geral' ? 'forYou' : t === 'forYou' ? 'seguindo' : 'seguindo');
     },
   })).current;
+  const wasNotifOpen = useRef(false);
   useEffect(() => {
-    if (notifOpen) markAllAsRead();
+    // Mark read when the drawer CLOSES, so the user can still see the unread (purple) state while it's open
+    if (wasNotifOpen.current && !notifOpen) markAllAsRead();
+    wasNotifOpen.current = notifOpen;
   }, [notifOpen, markAllAsRead]);
 
   useEffect(() => {
@@ -547,6 +551,7 @@ function NotificationsDrawer({
             data={notifs}
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.notifListContent}
             ItemSeparatorComponent={() => <View style={styles.notifSeparator} />}
             ListEmptyComponent={
               <View style={styles.notifEmpty}>
@@ -557,9 +562,11 @@ function NotificationsDrawer({
             renderItem={({ item }) => {
               const diff = Date.now() - new Date(item.created_at).getTime();
               const mins = Math.floor(diff / 60000);
-              const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins} min` : mins < 1440 ? `${Math.floor(mins / 60)} h` : `${Math.floor(mins / 1440)} d`;
-              const actorName = item.actor?.display_name ?? item.actor?.username ?? 'Alguém';
+              const timeStr = mins < 1 ? 'agora' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;
+              const username = item.actor?.username ?? item.actor?.display_name ?? 'alguem';
               const isMessage = item.type === 'message';
+              const unread = !item.read;
+              const BadgeIcon = item.type === 'like' ? Heart : item.type === 'follow' ? UserPlus : item.type === 'comment' ? MessageCircle : Send;
               const link = isMessage
                 ? (item.actor_id ? `/(tabs)/chat/${item.actor_id}` : '/(tabs)/chat')
                 : item.post_id
@@ -579,19 +586,34 @@ function NotificationsDrawer({
                   overshootRight={false}
                 >
                   <TouchableOpacity
-                    style={[styles.notifRow, !item.read && styles.notifRowUnread]}
-                    activeOpacity={0.7}
+                    style={[styles.notifCard, unread ? styles.notifCardUnread : styles.notifCardRead]}
+                    activeOpacity={0.8}
                     onPress={() => { onClose(); if (link) router.push(link as any); }}
                   >
-                    <Avatar uri={item.actor?.avatar_url ?? ''} size="md" />
-                    <View style={styles.notifInfo}>
-                      <Text style={styles.notifName} numberOfLines={1}>{actorName}</Text>
-                      <Text style={[styles.notifSub, isMessage && styles.notifSubMessage]} numberOfLines={2}>
-                        {item.text}
-                        <Text style={styles.notifTime}>{`  ·  ${timeStr}`}</Text>
-                      </Text>
+                    {unread && (
+                      <LinearGradient
+                        colors={['rgba(155,93,229,0.24)', 'rgba(155,93,229,0.03)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={StyleSheet.absoluteFill}
+                        pointerEvents="none"
+                      />
+                    )}
+                    {unread && <View style={styles.notifCardAccent} pointerEvents="none" />}
+                    <View style={styles.notifAvatarWrap}>
+                      <Avatar uri={item.actor?.avatar_url ?? ''} size="md" />
+                      <View style={styles.notifTypeBadge}>
+                        <BadgeIcon color={Colors.white} size={11} strokeWidth={2.6} fill={item.type === 'like' ? Colors.white : 'transparent'} />
+                      </View>
                     </View>
-                    {!item.read && <View style={styles.notifUnreadDot} />}
+                    <View style={styles.notifInfo}>
+                      <Text style={styles.notifName} numberOfLines={1}>@{username}</Text>
+                      <Text style={[styles.notifSub, unread && styles.notifSubUnread]} numberOfLines={2}>{item.text}</Text>
+                    </View>
+                    <View style={styles.notifMeta}>
+                      <Text style={styles.notifTime}>{timeStr}</Text>
+                      {unread && <View style={styles.notifUnreadDot} />}
+                    </View>
                   </TouchableOpacity>
                 </ReanimatedSwipeable>
               );
@@ -1655,11 +1677,10 @@ const styles = StyleSheet.create({
     color: Colors.textDisabled,
   },
   notifUnreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
     backgroundColor: Colors.secondary,
-    marginLeft: Spacing.sm,
   },
   drawerRowJoined: {
     backgroundColor: 'rgba(255,45,120,0.06)',
@@ -1715,21 +1736,56 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.textMuted,
   },
-  notifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  notifListContent: {
     paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-    backgroundColor: Colors.surface,
-  },
-  notifRowUnread: {
-    backgroundColor: 'rgba(155,93,229,0.07)',
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
+    flexGrow: 1,
   },
   notifSeparator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.border,
-    marginLeft: Spacing.xl + 44 + Spacing.md,
+    height: Spacing.md,
+  },
+  notifCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+  },
+  notifCardRead: {
+    backgroundColor: Colors.surfaceElevated,
+  },
+  notifCardUnread: {
+    backgroundColor: 'rgba(155,93,229,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(155,93,229,0.30)',
+  },
+  notifCardAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: Colors.primary,
+  },
+  notifAvatarWrap: {
+    position: 'relative',
+    flexShrink: 0,
+  },
+  notifTypeBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -3,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.surface,
   },
   notifInfo: {
     flex: 1,
@@ -1747,13 +1803,19 @@ const styles = StyleSheet.create({
     color: Colors.textDim,
     lineHeight: 18,
   },
-  notifSubMessage: {
+  notifSubUnread: {
     fontFamily: FontFamily.bodyMedium,
-    color: '#CFCFCF',
+    color: '#E2E2E2',
+  },
+  notifMeta: {
+    alignSelf: 'stretch',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingVertical: 1,
   },
   notifTime: {
     fontFamily: FontFamily.body,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     color: Colors.textMuted,
   },
   notifSwipeDelete: {
@@ -1761,6 +1823,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.urgent,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: Radius.lg,
+    marginLeft: Spacing.sm,
   },
   notifEmpty: {
     paddingVertical: Spacing['2xl'],
