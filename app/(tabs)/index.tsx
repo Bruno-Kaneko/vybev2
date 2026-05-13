@@ -68,7 +68,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [realChats, setRealChats] = useState<DBChat[]>([]);
 
-  const { notifications: notifs, unreadCount, markAllAsRead, dismiss } = useNotifications();
+  const { notifications: notifs, unreadCount, markAllAsRead, dismiss, seenAt: notifSeenAt, isUnread: isNotifUnread } = useNotifications();
 
   // Feed tabs
   const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
@@ -141,13 +141,13 @@ export default function HomeScreen() {
     },
   })).current;
   // When the drawer opens we (a) snapshot which notifs were unread so they keep the purple
-  // highlight while it's open, and (b) immediately persist read=true so a quick reload won't
-  // resurface them. On close we mark read again to catch anything that arrived while open.
+  // highlight while it's open, and (b) immediately advance the "seen" mark (persisted) so a
+  // reload won't resurface them. On close we re-mark to catch anything that arrived while open.
   const [notifUnreadSnapshot, setNotifUnreadSnapshot] = useState<Set<string>>(() => new Set());
   const wasNotifOpen = useRef(false);
   useEffect(() => {
     if (notifOpen && !wasNotifOpen.current) {
-      setNotifUnreadSnapshot(new Set(notifs.filter(n => !n.read).map(n => n.id)));
+      setNotifUnreadSnapshot(new Set(notifs.filter(isNotifUnread).map(n => n.id)));
       markAllAsRead();
     } else if (!notifOpen && wasNotifOpen.current) {
       markAllAsRead();
@@ -224,6 +224,7 @@ export default function HomeScreen() {
         insets={insets}
         notifs={notifs}
         unreadIds={notifUnreadSnapshot}
+        seenAt={notifSeenAt}
         onDismiss={dismiss}
       />
       <GrupoesDrawer
@@ -513,6 +514,7 @@ function NotificationsDrawer({
   insets,
   notifs,
   unreadIds,
+  seenAt,
   onDismiss,
 }: {
   visible: boolean;
@@ -520,9 +522,13 @@ function NotificationsDrawer({
   insets: { bottom: number; top: number };
   notifs: DBNotification[];
   unreadIds: Set<string>;
+  seenAt: number;
   onDismiss: (id: string) => void;
 }) {
-  const isUnread = useCallback((n: DBNotification) => unreadIds.has(n.id) || !n.read, [unreadIds]);
+  const isUnread = useCallback(
+    (n: DBNotification) => unreadIds.has(n.id) || (!n.read && new Date(n.created_at).getTime() > seenAt),
+    [unreadIds, seenAt]
+  );
 
   const displayItems: NotifDisplayItem[] = useMemo(() => {
     const out: NotifDisplayItem[] = [];

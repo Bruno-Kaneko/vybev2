@@ -1,15 +1,21 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { deleteNotification, getNotifications, markAllNotificationsRead, NOTIFICATIONS_TTL_MS } from '@/lib/db';
 import type { DBNotification } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 
 const POLL_INTERVAL_MS = 15_000;
+const SEEN_KEY = (uid: string) => `notif_seen_at:${uid}`;
 
 type NotificationsContextType = {
   notifications: DBNotification[];
   unreadCount: number;
+  /** Epoch ms — notifications created at or before this are considered "seen". */
+  seenAt: number;
+  /** A notification is unread if it isn't flagged read in the DB and arrived after the last "seen" mark. */
+  isUnread: (n: { read: boolean; created_at: string }) => boolean;
   refresh: () => Promise<void>;
   markAllAsRead: () => Promise<void>;
   dismiss: (id: string) => void;
@@ -18,6 +24,8 @@ type NotificationsContextType = {
 const NotificationsContext = createContext<NotificationsContextType>({
   notifications: [],
   unreadCount: 0,
+  seenAt: 0,
+  isUnread: () => false,
   refresh: async () => {},
   markAllAsRead: async () => {},
   dismiss: () => {},
@@ -31,13 +39,29 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const { user } = useAuth();
   const userId = user?.id;
   const [notifications, setNotifications] = useState<DBNotification[]>([]);
+  const [seenAt, setSeenAt] = useState(0);
   const userIdRef = useRef<string | undefined>(userId);
 
   useEffect(() => { userIdRef.current = userId; }, [userId]);
 
+  // Load the persisted "seen" mark for this user (survives reloads).
+  useEffect(() => {
+    if (!userId) { setSeenAt(0); return; }
+    let cancelled = false;
+    AsyncStorage.getItem(SEEN_KEY(userId))
+      .then(v => { if (!cancelled && v) setSeenAt(parseInt(v, 10) || 0); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const isUnread = useCallback(
+    (n: { read: boolean; created_at: string }) => !n.read && new Date(n.created_at).getTime() > seenAt,
+    [seenAt]
+  );
+
   const unreadCount = useMemo(
-    () => notifications.filter(n => !n.read).length,
-    [notifications]
+    () => notifications.filter(isUnread).length,
+    [notifications, isUnread]
   );
 
   const refresh = useCallback(async () => {
@@ -65,14 +89,21 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const markAllAsRead = useCallback(async () => {
     const uid = userIdRef.current;
     if (!uid) return;
+    // "Seen" mark: at least now, but never earlier than the newest notification we already hold,
+    // so a client clock that lags behind the server can't leave old notifications stuck as unread.
+    const newestMs = notifications.reduce((m, n) => Math.max(m, new Date(n.created_at).getTime()), 0);
+    const mark = Math.max(Date.now(), newestMs);
+    setSeenAt(prev => (mark > prev ? mark : prev));
+    AsyncStorage.setItem(SEEN_KEY(uid), String(mark)).catch(() => {});
+    // Best-effort DB flag too (harmless if RLS/permissions block it — the seen-mark above is what counts).
     setNotifications(prev => prev.map(n => n.read ? n : { ...n, read: true }));
     try {
       await markAllNotificationsRead(uid);
-      log('markAllAsRead ok');
+      log('markAllAsRead ok, mark=', mark);
     } catch (e: any) {
       log('markAllAsRead err:', e?.message);
     }
-  }, []);
+  }, [notifications]);
 
   const dismiss = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
@@ -122,7 +153,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [userId, refresh]);
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, refresh, markAllAsRead, dismiss }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, seenAt, isUnread, refresh, markAllAsRead, dismiss }}>
       {children}
     </NotificationsContext.Provider>
   );
