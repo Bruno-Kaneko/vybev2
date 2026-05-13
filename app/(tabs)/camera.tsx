@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Modal, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle, AlignLeft } from 'lucide-react-native';
+import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle, AlignLeft, SwitchCamera } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_PLACES } from '@/constants/MockData';
 import { VybeButton } from '@/components/ui';
@@ -40,6 +41,78 @@ function LocationRow({ item, selected, onPress }: { item: NearbyPlace; selected:
       <Text style={styles.locDistance}>{item.distanceM < 1000 ? `${item.distanceM}m` : `${(item.distanceM / 1000).toFixed(1)}km`}</Text>
       {selected && <Check color={Colors.secondary} size={18} strokeWidth={2.4} />}
     </TouchableOpacity>
+  );
+}
+
+function CameraCapture({ onCapture, onClose }: { onCapture: (uri: string) => void; onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) requestPermission();
+  }, [permission, requestPermission]);
+
+  const pickFromFile = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+    if (!result.canceled) onCapture(result.assets[0].uri);
+  };
+
+  const shoot = async () => {
+    if (!cameraRef.current || busy) return;
+    setBusy(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+      if (photo?.uri) onCapture(photo.uri);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível tirar a foto. Tente novamente.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!permission) {
+    return <View style={[camStyles.root, camStyles.center]}><ActivityIndicator color={Colors.secondary} /></View>;
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={[camStyles.root, camStyles.center, { padding: Spacing.xl, gap: Spacing.lg }]}>
+        <TouchableOpacity style={[camStyles.iconBtn, { position: 'absolute', left: Spacing.lg, top: insets.top + Spacing.md }]} onPress={onClose}>
+          <X color={Colors.white} size={22} strokeWidth={2.4} />
+        </TouchableOpacity>
+        <Camera color={Colors.secondary} size={48} strokeWidth={1.8} />
+        <Text style={camStyles.permTitle}>Acesso à câmera</Text>
+        <Text style={camStyles.permSub}>Precisamos da câmera para você tirar a foto do seu post.</Text>
+        <VybeButton label="Permitir câmera" onPress={requestPermission} />
+        {Platform.OS === 'web' && (
+          <TouchableOpacity onPress={pickFromFile}>
+            <Text style={camStyles.fileLink}>Ou escolher um arquivo</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={camStyles.root}>
+      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
+      <View style={[camStyles.topBar, { top: insets.top + Spacing.md }]}>
+        <TouchableOpacity style={camStyles.iconBtn} onPress={onClose}>
+          <X color={Colors.white} size={22} strokeWidth={2.4} />
+        </TouchableOpacity>
+        <TouchableOpacity style={camStyles.iconBtn} onPress={() => setFacing(f => (f === 'back' ? 'front' : 'back'))}>
+          <SwitchCamera color={Colors.white} size={22} strokeWidth={2.2} />
+        </TouchableOpacity>
+      </View>
+      <View style={[camStyles.bottomBar, { paddingBottom: insets.bottom + Spacing.xl }]}>
+        <TouchableOpacity style={camStyles.shutterOuter} onPress={shoot} activeOpacity={0.8} disabled={busy}>
+          {busy ? <ActivityIndicator color={Colors.white} /> : <View style={camStyles.shutterInner} />}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -98,41 +171,9 @@ export default function CameraScreen() {
     })();
   }, []);
 
-  const openCamera = async () => {
-    if (Platform.OS === 'web') {
-      // Web não suporta câmera direta — abre seletor de arquivo
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.85,
-        allowsEditing: true,
-        aspect: [9, 12],
-      });
-      if (!result.canceled) setImage(result.assets[0].uri);
-      return;
-    }
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Câmera bloqueada', 'Permita o acesso à câmera nas configurações do celular.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [9, 12],
-    });
-    if (!result.canceled) setImage(result.assets[0].uri);
-  };
-
-  const handleBack = () => {
-    if (image) {
-      Alert.alert('Descartar post?', 'Sua foto será perdida.', [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Descartar', style: 'destructive', onPress: () => router.back() },
-      ]);
-    } else {
-      router.back();
-    }
-  };
+  // Back from the post-setup screen returns to the live camera (Instagram-style); the X on the
+  // camera itself exits to the previous tab.
+  const handleBack = () => setImage(null);
 
   const handlePost = async () => {
     if (!image || !selectedPlace || !user) return;
@@ -169,6 +210,11 @@ export default function CameraScreen() {
     return 'Publicar agora';
   };
 
+  // Instagram-style: open straight into the live camera; once a photo is taken, show the post setup.
+  if (!image) {
+    return <CameraCapture onCapture={setImage} onClose={() => router.back()} />;
+  }
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
@@ -188,30 +234,13 @@ export default function CameraScreen() {
           </View>
 
           <View style={styles.imagePicker}>
-            {image ? (
-              <>
-                <Image source={{ uri: image }} style={[styles.previewImage, { transform: [{ scaleX: -1 }] }]} resizeMode="cover" />
-                <View style={styles.retakeRow}>
-                  <TouchableOpacity style={styles.retakeBtn} onPress={openCamera} activeOpacity={0.85}>
-                    <Camera color={Colors.white} size={16} strokeWidth={2.2} />
-                    <Text style={styles.retakeText}>Tirar outra</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <View style={styles.imagePlaceholder}>
-                <View style={styles.placeholderIcon}>
-                  <Camera color={Colors.secondary} size={40} strokeWidth={1.9} />
-                </View>
-                <Text style={styles.placeholderText}>Tire uma foto para o seu post</Text>
-                <View style={styles.photoButtons}>
-                  <TouchableOpacity style={styles.photoBtn} onPress={openCamera} activeOpacity={0.85}>
-                    <Camera color={Colors.secondary} size={20} strokeWidth={2.2} />
-                    <Text style={styles.photoBtnText}>Abrir câmera</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
+            <Image source={{ uri: image }} style={styles.previewImage} resizeMode="cover" />
+            <View style={styles.retakeRow}>
+              <TouchableOpacity style={styles.retakeBtn} onPress={() => setImage(null)} activeOpacity={0.85}>
+                <Camera color={Colors.white} size={16} strokeWidth={2.2} />
+                <Text style={styles.retakeText}>Tirar outra</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -675,5 +704,73 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.sm,
+  },
+});
+
+const camStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBar: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    paddingTop: Spacing.xl,
+  },
+  shutterOuter: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    borderColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shutterInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.white,
+  },
+  permTitle: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.xl,
+    color: Colors.white,
+    textAlign: 'center',
+  },
+  permSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.md,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: FontSize.md * 1.5,
+  },
+  fileLink: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: FontSize.sm,
+    color: Colors.textMuted,
+    textDecorationLine: 'underline',
   },
 });
