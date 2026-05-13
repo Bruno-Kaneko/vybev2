@@ -423,6 +423,14 @@ export async function updateRelationshipStatus(
     .eq('id', userId);
 }
 
+export async function setProfilePoints(userId: string, points: number): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ points })
+    .eq('id', userId);
+  if (error) throw error;
+}
+
 // ────────────────────────────────────────────────
 // DISCOVER SEARCH
 // ────────────────────────────────────────────────

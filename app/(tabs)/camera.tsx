@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle, AlignLeft, Images } from 'lucide-react-native';
+import { Check, Clock3, MapPin, Send, X, Camera, AlertCircle, AlignLeft } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_PLACES } from '@/constants/MockData';
 import { VybeButton } from '@/components/ui';
@@ -123,23 +123,6 @@ export default function CameraScreen() {
     if (!result.canceled) setImage(result.assets[0].uri);
   };
 
-  const openGallery = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Galeria bloqueada', 'Permita o acesso à galeria nas configurações do celular.');
-        return;
-      }
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [9, 12],
-    });
-    if (!result.canceled) setImage(result.assets[0].uri);
-  };
-
   const handleBack = () => {
     if (image) {
       Alert.alert('Descartar post?', 'Sua foto será perdida.', [
@@ -211,11 +194,7 @@ export default function CameraScreen() {
                 <View style={styles.retakeRow}>
                   <TouchableOpacity style={styles.retakeBtn} onPress={openCamera} activeOpacity={0.85}>
                     <Camera color={Colors.white} size={16} strokeWidth={2.2} />
-                    <Text style={styles.retakeText}>Câmera</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.retakeBtn} onPress={openGallery} activeOpacity={0.85}>
-                    <Images color={Colors.white} size={16} strokeWidth={2.2} />
-                    <Text style={styles.retakeText}>Galeria</Text>
+                    <Text style={styles.retakeText}>Tirar outra</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -224,15 +203,11 @@ export default function CameraScreen() {
                 <View style={styles.placeholderIcon}>
                   <Camera color={Colors.secondary} size={40} strokeWidth={1.9} />
                 </View>
-                <Text style={styles.placeholderText}>Adicione uma foto ao seu post</Text>
+                <Text style={styles.placeholderText}>Tire uma foto para o seu post</Text>
                 <View style={styles.photoButtons}>
                   <TouchableOpacity style={styles.photoBtn} onPress={openCamera} activeOpacity={0.85}>
                     <Camera color={Colors.secondary} size={20} strokeWidth={2.2} />
-                    <Text style={styles.photoBtnText}>Câmera</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.photoBtn, styles.photoBtnAlt]} onPress={openGallery} activeOpacity={0.85}>
-                    <Images color={Colors.textMuted} size={20} strokeWidth={2.2} />
-                    <Text style={[styles.photoBtnText, { color: Colors.textMuted }]}>Galeria</Text>
+                    <Text style={styles.photoBtnText}>Abrir câmera</Text>
                   </TouchableOpacity>
                 </View>
               </View>

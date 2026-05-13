@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Beer, Camera, Check, Crown, Gift, Heart, MapPin, Ticket, Users, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_REWARDS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getProfile } from '@/lib/db';
+import { getProfile, setProfilePoints } from '@/lib/db';
 import type { Reward } from '@/types';
+
+const COLLECTED_KEY = (uid: string) => `vybe_collected_earns:${uid}`;
 
 type RewardFilter = 'todos' | Reward['category'];
 
@@ -29,15 +32,19 @@ export default function StoreScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const { session } = useAuth();
+  const uid = session?.user.id;
   const [userPoints, setUserPoints] = useState(0);
+  const [collected, setCollected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!session?.user.id) return;
-    getProfile(session.user.id).then(profile => {
+    if (!uid) return;
+    getProfile(uid).then(profile => {
       if (profile?.points) setUserPoints(profile.points);
     });
-  }, [session?.user.id]);
-  const [collected, setCollected] = useState<Set<string>>(new Set());
+    AsyncStorage.getItem(COLLECTED_KEY(uid))
+      .then(v => { if (v) { try { setCollected(new Set(JSON.parse(v) as string[])); } catch {} } })
+      .catch(() => {});
+  }, [uid]);
   const [redeemReward, setRedeemReward] = useState<Reward | null>(null);
   const [redeemed, setRedeemed] = useState(false);
   const [rewardFilter, setRewardFilter] = useState<RewardFilter>('todos');
@@ -80,10 +87,15 @@ export default function StoreScreen() {
                     <TouchableOpacity
                       style={[styles.collectBtn, collected.has(item.id) && styles.collectBtnDone]}
                       onPress={() => {
-                        if (!collected.has(item.id)) {
-                          setCollected(prev => new Set([...prev, item.id]));
-                          setUserPoints(prev => prev + item.points);
-                        }
+                        if (collected.has(item.id) || !uid) return;
+                        const nextCollected = new Set([...collected, item.id]);
+                        setCollected(nextCollected);
+                        AsyncStorage.setItem(COLLECTED_KEY(uid), JSON.stringify([...nextCollected])).catch(() => {});
+                        setUserPoints(prev => {
+                          const next = prev + item.points;
+                          setProfilePoints(uid, next).catch(() => {});
+                          return next;
+                        });
                       }}
                       disabled={collected.has(item.id)}
                       activeOpacity={0.8}
