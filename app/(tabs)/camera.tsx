@@ -98,7 +98,7 @@ function CameraCapture({ onCapture, onClose }: { onCapture: (uri: string) => voi
 
   return (
     <View style={camStyles.root}>
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
+      <CameraView key={facing} ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
       <View style={[camStyles.topBar, { top: insets.top + Spacing.md }]}>
         <TouchableOpacity style={camStyles.iconBtn} onPress={onClose}>
           <X color={Colors.white} size={22} strokeWidth={2.4} />
@@ -220,7 +220,7 @@ export default function CameraScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingHorizontal: responsive.pagePadding, paddingBottom: insets.bottom + 110 },
+          { paddingHorizontal: responsive.pagePadding, paddingBottom: insets.bottom + Spacing['3xl'] },
         ]}
         showsVerticalScrollIndicator={false}
       >
