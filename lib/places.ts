@@ -56,8 +56,9 @@ function extractNeighborhood(address: string): string {
 
 async function cachePlacesToDB(places: NearbyPlace[]): Promise<void> {
   if (places.length === 0) return;
+  // Upsert pelo google_place_id — a tabela usa uuid como PK e google_place_id como link com o Google
   const rows = places.map(p => ({
-    id: p.id,
+    google_place_id: p.id,
     name: p.name,
     address: p.address,
     neighborhood: p.neighborhood || null,
@@ -69,7 +70,7 @@ async function cachePlacesToDB(places: NearbyPlace[]): Promise<void> {
     updated_at: new Date().toISOString(),
   }));
   try {
-    await supabase.from('places').upsert(rows, { onConflict: 'id' });
+    await supabase.from('places').upsert(rows, { onConflict: 'google_place_id' });
   } catch {
     // Cache é otimização — falha silenciosa não bloqueia o usuário
   }

@@ -1,36 +1,44 @@
--- Cache de lugares vindos do Google Places API
--- Objetivo: economizar chamadas (custa $$$) e ter lugar central pra extender com dados próprios
---           (vibe, lotação, posts ativos, etc) no futuro
+-- ────────────────────────────────────────────────────────────────
+-- Integração Google Places — adiciona campos pra cache + link com Google
+--
+-- A tabela public.places já existe com schema próprio (vibe, crowd, queue, etc).
+-- Esta migration só ADICIONA o que falta — não destrói nada.
+--
+-- Idempotente — pode rodar várias vezes sem quebrar.
+-- ────────────────────────────────────────────────────────────────
 
-create table if not exists public.places (
-  id            text primary key,                -- Google place_id (ex: "ChIJ...")
-  name          text not null,
-  address       text not null default '',
-  neighborhood  text,
-  lat           double precision not null,
-  lng           double precision not null,
-  types         text[] not null default '{}',
-  primary_type  text,
-  photo_ref     text,                            -- referência de foto do Google (gera URL no app)
-  -- Campos próprios (preenchidos pelos usuários no futuro)
-  vibe          text,
-  crowd_level   integer,                         -- 0-5
-  active_post_count integer not null default 0,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
-);
+-- Campo principal: ID do Google Places (ex: "ChIJN1t_tDeuEmsRUsoyG83frY4")
+alter table public.places add column if not exists google_place_id  text;
+-- Tipos do Google (bar, night_club, restaurant…) — separado do "tags" que é user-defined
+alter table public.places add column if not exists types            text[] not null default '{}';
+alter table public.places add column if not exists primary_type     text;
+-- Referência de foto do Google (pra montar URL no app)
+alter table public.places add column if not exists photo_ref        text;
+-- Contador de posts ativos (atualizado pelo app)
+alter table public.places add column if not exists active_post_count integer not null default 0;
+alter table public.places add column if not exists updated_at       timestamptz not null default now();
 
-create index if not exists places_lat_lng_idx on public.places (lat, lng);
-create index if not exists places_types_idx on public.places using gin (types);
+-- Unique constraint no google_place_id (idempotente)
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'places_google_place_id_key' and conrelid = 'public.places'::regclass
+  ) then
+    alter table public.places add constraint places_google_place_id_key unique (google_place_id);
+  end if;
+exception when others then null; end $$;
 
+-- Índices
+create index if not exists places_lat_lng_idx        on public.places (lat, lng);
+create index if not exists places_types_idx          on public.places using gin (types);
+create index if not exists places_google_id_idx      on public.places (google_place_id);
+
+-- RLS — permite leitura pública + escrita por autenticados (cache vem do app)
 alter table public.places enable row level security;
 
--- Leitura pública (qualquer usuário autenticado pode ver lugares)
 drop policy if exists "places_select_all" on public.places;
-create policy "places_select_all" on public.places
-  for select using (true);
+create policy "places_select_all" on public.places for select using (true);
 
--- Insert/Update: apenas usuários autenticados podem inserir (cache vem do app)
 drop policy if exists "places_insert_authenticated" on public.places;
 create policy "places_insert_authenticated" on public.places
   for insert with check (auth.role() = 'authenticated');
@@ -38,3 +46,6 @@ create policy "places_insert_authenticated" on public.places
 drop policy if exists "places_update_authenticated" on public.places;
 create policy "places_update_authenticated" on public.places
   for update using (auth.role() = 'authenticated');
+
+-- PostgREST: recarregar schema
+notify pgrst, 'reload schema';
