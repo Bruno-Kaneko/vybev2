@@ -17,7 +17,7 @@ import {
   PanResponder,
   useWindowDimensions,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, UserPlus, Users, X } from 'lucide-react-native';
@@ -122,10 +122,12 @@ export default function HomeScreen() {
   }, [loadFeed]);
 
   useEffect(() => {
-    loadFeed();
     const interval = setInterval(loadFeed, 60_000);
     return () => clearInterval(interval);
   }, [loadFeed]);
+
+  // Re-fetch whenever the Home tab regains focus (e.g. right after publishing a post)
+  useFocusEffect(useCallback(() => { loadFeed(); }, [loadFeed]));
 
   useEffect(() => {
     loadLocation();
