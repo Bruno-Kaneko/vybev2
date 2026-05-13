@@ -83,6 +83,7 @@ export default function MyProfileScreen() {
     getProfile(user.id).then(p => {
       if (cancelled) return;
       if (p?.relationshipStatus) setLocalStatus(p.relationshipStatus as any);
+      if (p?.bio) setLocalBio(p.bio);
       setProfileStats({ followers: p?.followers ?? 0, following: p?.following ?? 0, points: p?.points ?? 0 });
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -105,9 +106,14 @@ export default function MyProfileScreen() {
     setEditLoading(true);
     try {
       const cleanUsername = editUsername.trim().replace(/^@/, '');
-      await supabase.auth.updateUser({ data: { username: cleanUsername, bio: editBio.trim() } });
+      const cleanBio = editBio.trim();
+      await supabase.auth.updateUser({ data: { username: cleanUsername, bio: cleanBio } });
+      // Mirror to the profiles row so the value also shows in other views (e.g. /profile/[id])
+      if (user?.id) {
+        await supabase.from('profiles').update({ username: cleanUsername, bio: cleanBio || null }).eq('id', user.id);
+      }
       setLocalUsername(cleanUsername);
-      setLocalBio(editBio.trim() || null);
+      setLocalBio(cleanBio || null);
       setMessage('Perfil atualizado!');
       setEditOpen(false);
       setTimeout(() => setMessage(''), 3000);
@@ -214,6 +220,7 @@ export default function MyProfileScreen() {
           </TouchableOpacity>
           <Text style={styles.displayName}>{displayName}</Text>
           <Text style={styles.username}>@{username}</Text>
+          {bio ? <Text style={styles.bio}>{bio}</Text> : null}
           {(() => {
             const statusOpt = localStatus ? STATUS_OPTIONS.find(o => o.value === localStatus) : undefined;
             return (
@@ -522,6 +529,15 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.md,
     color: Colors.textMuted,
+  },
+  bio: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    color: Colors.text,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.xl,
+    marginTop: Spacing.xs,
+    lineHeight: FontSize.sm * 1.45,
   },
   statusBadge: {
     paddingHorizontal: Spacing.md,
