@@ -72,6 +72,11 @@ function formatCountdown(ms: number): string {
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  // Always land on the home tab and clear anything stacked on top of (tabs) (e.g. a lingering profile screen)
+  const goHome = useCallback(() => {
+    try { if (router.canDismiss()) router.dismissAll(); } catch {}
+    router.replace('/(tabs)');
+  }, []);
   const responsive = useResponsive();
   const { user: authUser } = useAuth();
   const chatWidth = responsive.isDesktop ? 720 : responsive.contentMaxWidth;
@@ -262,7 +267,7 @@ export default function ChatScreen() {
     >
       <View style={[styles.shell, { maxWidth: chatWidth }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backBtn}>
+          <TouchableOpacity onPress={goHome} style={styles.backBtn}>
             <ChevronLeft color={Colors.textMuted} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
           <TouchableOpacity

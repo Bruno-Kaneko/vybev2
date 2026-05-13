@@ -66,7 +66,7 @@ function setupListeners(): (() => void) | undefined {
       if (!data) return;
 
       if (data.type === 'message' && data.otherId) {
-        router.push(`/(tabs)/chat/${data.otherId}` as any);
+        router.navigate(`/(tabs)/chat/${data.otherId}` as any);
       } else if (data.type === 'follow' && data.userId) {
         router.push(`/profile/${data.userId}` as any);
       } else if (data.type === 'reaction' && data.postId) {

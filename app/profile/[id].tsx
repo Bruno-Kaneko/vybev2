@@ -305,7 +305,7 @@ export default function ProfileScreen() {
               style={{ flex: 1 }}
             />
             <TouchableOpacity
-              onPress={() => router.push(`/(tabs)/chat/${user.id}`)}
+              onPress={() => router.dismissTo(`/(tabs)/chat/${user.id}`)}
               style={styles.msgBtn}
             >
               <MessageCircle color={Colors.text} size={19} strokeWidth={2.2} />
