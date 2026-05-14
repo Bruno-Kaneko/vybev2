@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  CalendarDays, Camera, ChevronLeft, Clock, Copy, Grid2X2,
+  CalendarDays, Camera, ChevronLeft, Copy, Grid2X2,
   Heart, Info, MapPin, Music, Navigation, Radio, Share2, X,
 } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
@@ -22,12 +22,6 @@ import {
 import type { DBPlace } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import type { CrowdLevel, Place, Post, QueueLevel, VibeType } from '@/types';
-
-const MOCK_EVENTS = [
-  { id: 'e1', date: 'Sex, 02 Mai', time: '23:00', title: 'Open Format Night', dj: 'DJ Marquinhos', price: 'R$ 40' },
-  { id: 'e2', date: 'Sáb, 03 Mai', time: '22:00', title: 'Techno Session', dj: 'ANNA b Savage', price: 'R$ 80' },
-  { id: 'e3', date: 'Sex, 09 Mai', time: '23:00', title: 'House Lovers', dj: 'Djeff', price: 'R$ 50' },
-];
 
 function copyToClipboard(text: string) {
   if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
@@ -508,24 +502,13 @@ export default function PlaceProfileScreen() {
                 <X color={Colors.textMuted} size={20} strokeWidth={2.2} />
               </TouchableOpacity>
             </View>
-            {MOCK_EVENTS.map(ev => (
-              <View key={ev.id} style={styles.eventRow}>
-                <View style={styles.eventDateBox}>
-                  <Text style={styles.eventDate}>{ev.date.split(',')[0]}</Text>
-                  <Text style={styles.eventDay}>{ev.date.split(', ')[1]}</Text>
-                </View>
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventTitle}>{ev.title}</Text>
-                  <View style={styles.eventMeta}>
-                    <Music color={Colors.textMuted} size={12} strokeWidth={2} />
-                    <Text style={styles.eventMetaText}>{ev.dj}</Text>
-                    <Clock color={Colors.textMuted} size={12} strokeWidth={2} />
-                    <Text style={styles.eventMetaText}>{ev.time}</Text>
-                  </View>
-                </View>
-                <Text style={styles.eventPrice}>{ev.price}</Text>
-              </View>
-            ))}
+            <View style={styles.scheduleSoonBox}>
+              <CalendarDays color={Colors.secondary} size={40} strokeWidth={1.8} />
+              <Text style={styles.scheduleSoonTitle}>Em breve</Text>
+              <Text style={styles.scheduleSoonSub}>
+                A agenda de eventos deste lugar será preenchida em breve.
+              </Text>
+            </View>
           </Animated.View>
         </View>
       </Modal>
@@ -800,6 +783,17 @@ const styles = StyleSheet.create({
   eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   eventMetaText: { fontFamily: FontFamily.body, fontSize: FontSize.xs, color: Colors.textMuted },
   eventPrice: { fontFamily: FontFamily.heading, fontSize: FontSize.sm, color: Colors.gold },
+  scheduleSoonBox: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: Spacing['3xl'], paddingHorizontal: Spacing.xl, gap: Spacing.md,
+  },
+  scheduleSoonTitle: {
+    fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white,
+  },
+  scheduleSoonSub: {
+    fontFamily: FontFamily.body, fontSize: FontSize.sm,
+    color: Colors.textMuted, textAlign: 'center', lineHeight: FontSize.sm * 1.5,
+  },
   popupOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing['2xl'],

@@ -24,6 +24,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser, getFollowRequestStatus, sendFollowRequest, cancelFollowRequest, notifyUser } from '@/lib/db';
 import type { FollowRequestStatus } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import type { RelationshipStatus, Post, User } from '@/types';
 import { Lock } from 'lucide-react-native';
 
@@ -109,6 +110,17 @@ export default function ProfileScreen() {
   }, [id, isReal, authUser?.id]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  // Real-time: atualiza contadores de seguidores/seguindo quando alguém segue ou deixa de seguir este usuário (ou quando ele segue/deixa de seguir outros).
+  useEffect(() => {
+    if (!isReal || !id) return;
+    const channel = supabase
+      .channel(`user_follows:${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `following_id=eq.${id}` }, () => { loadProfile(true); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `follower_id=eq.${id}` }, () => { loadProfile(true); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, isReal, loadProfile]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

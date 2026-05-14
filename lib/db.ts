@@ -758,6 +758,7 @@ export type DBPlace = {
   types: string[] | null;
   primary_type: string | null;
   photo_ref: string | null;
+  photo_url: string | null;
   price_level: number | null;
   cover_charge: number | null;
   near_metro: boolean | null;
@@ -814,10 +815,10 @@ export async function getPlaces(): Promise<DBPlace[]> {
 // Mapeia DBPlace → Place do app (deriva category dos tipos do Google quando ausente)
 export function mapDBPlaceToPlace(p: DBPlace): import('@/types').Place {
   const category = p.category ?? googleTypesToCategory(p.types, p.primary_type);
-  // Constrói URL da foto do Google Place Photos (import dinâmico evita ciclo)
-  const thumbnail = p.photo_ref
-    ? `https://places.googleapis.com/v1/${p.photo_ref}/media?maxWidthPx=400&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY}`
-    : undefined;
+  // Usa a URL CDN já resolvida (preenchida pelo script resolve-photo-urls.mjs).
+  // Em fallback raro (URL ainda não resolvida), retorna undefined em vez de tentar o endpoint Places API
+  // (que retorna 404 quando carregado direto pelo <Image>).
+  const thumbnail = p.photo_url ?? undefined;
   return {
     id: p.id,
     name: p.name,

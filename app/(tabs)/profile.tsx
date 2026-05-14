@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -76,21 +76,38 @@ export default function MyProfileScreen() {
   const thumbSize = (contentWidth - thumbGap * 2) / 3;
 
   const [myPosts, setMyPosts] = useState<Post[]>([]);
+
+  const reloadStats = useCallback(() => {
+    if (!user?.id) return;
+    getProfile(user.id).then(p => {
+      if (!p) return;
+      const validStatuses: RelationshipStatus[] = ['solteiro', 'namorando', 'ficando', 'curtindo'];
+      if (p.relationshipStatus && validStatuses.includes(p.relationshipStatus as RelationshipStatus)) {
+        setLocalStatus(p.relationshipStatus as RelationshipStatus);
+      }
+      if (p.bio) setLocalBio(p.bio);
+      setProfileStats({ followers: p.followers ?? 0, following: p.following ?? 0, points: p.points ?? 0 });
+    }).catch(() => {});
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
     getUserPosts(user.id).then(p => { if (!cancelled) setMyPosts(p); }).catch(() => {});
-    getProfile(user.id).then(p => {
-      if (cancelled) return;
-      const validStatuses: RelationshipStatus[] = ['solteiro', 'namorando', 'ficando', 'curtindo'];
-      if (p?.relationshipStatus && validStatuses.includes(p.relationshipStatus as RelationshipStatus)) {
-        setLocalStatus(p.relationshipStatus as RelationshipStatus);
-      }
-      if (p?.bio) setLocalBio(p.bio);
-      setProfileStats({ followers: p?.followers ?? 0, following: p?.following ?? 0, points: p?.points ?? 0 });
-    }).catch(() => {});
+    reloadStats();
     return () => { cancelled = true; };
-  }, [user?.id]);
+  }, [user?.id, reloadStats]);
+
+  // Real-time: contador de seguidores/seguindo atualiza ao vivo
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`my_follows:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `following_id=eq.${user.id}` }, reloadStats)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `follower_id=eq.${user.id}` }, reloadStats)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, reloadStats]);
 
   const rawUsername = localUsername ?? user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
   const username = rawUsername.replace(/^@/, '');
