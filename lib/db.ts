@@ -814,11 +814,16 @@ export async function getPlaces(): Promise<DBPlace[]> {
 // Mapeia DBPlace → Place do app (deriva category dos tipos do Google quando ausente)
 export function mapDBPlaceToPlace(p: DBPlace): import('@/types').Place {
   const category = p.category ?? googleTypesToCategory(p.types, p.primary_type);
+  // Constrói URL da foto do Google Place Photos (import dinâmico evita ciclo)
+  const thumbnail = p.photo_ref
+    ? `https://places.googleapis.com/v1/${p.photo_ref}/media?maxWidthPx=400&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY}`
+    : undefined;
   return {
     id: p.id,
     name: p.name,
     address: p.address,
     category,
+    thumbnail,
     location: { latitude: p.lat, longitude: p.lng },
     activePosts: 0,
     activeUsers: 0,
@@ -836,6 +841,15 @@ export function mapDBPlaceToPlace(p: DBPlace): import('@/types').Place {
     queueLevel: (p.queue_level as any) ?? undefined,
     vibe: (p.vibe as any) ?? undefined,
   };
+}
+
+// Conta seguidores em tempo real direto da tabela place_follows (mais confiável que follower_count cacheada)
+export async function getPlaceFollowerCount(placeId: string): Promise<number> {
+  const { count } = await supabase
+    .from('place_follows')
+    .select('*', { count: 'exact', head: true })
+    .eq('place_id', placeId);
+  return count ?? 0;
 }
 
 export async function getPlaceActivePosts(placeId: string): Promise<Post[]> {

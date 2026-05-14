@@ -17,8 +17,10 @@ import { useAuth } from '@/context/AuthContext';
 import {
   getPlace, getPlaceActivePosts, submitPlaceReport,
   isFollowingPlace, followPlace, unfollowPlace, mapDBPlaceToPlace,
+  getPlaceFollowerCount,
 } from '@/lib/db';
 import type { DBPlace } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import type { CrowdLevel, Place, Post, QueueLevel, VibeType } from '@/types';
 
 const MOCK_EVENTS = [
@@ -45,6 +47,7 @@ export default function PlaceProfileScreen() {
   const [realPosts, setRealPosts] = useState<Post[]>([]);
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
   const [activeTab, setActiveTab] = useState<'posts' | 'info'>('posts');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -80,9 +83,10 @@ export default function PlaceProfileScreen() {
       // Carrega o place primeiro pra ter o uuid interno (pode receber uuid ou google_place_id na URL)
       const p = await getPlace(id);
       if (!p) { setLoading(false); return; }
-      const [posts, isFollowing] = await Promise.all([
+      const [posts, isFollowing, count] = await Promise.all([
         getPlaceActivePosts(p.id),
         authUser ? isFollowingPlace(authUser.id, p.id) : Promise.resolve(false),
+        getPlaceFollowerCount(p.id),
       ]);
       setRealPlace(p);
       setLiveCrowd((p.crowd_level as CrowdLevel) ?? undefined);
@@ -93,12 +97,29 @@ export default function PlaceProfileScreen() {
       setDraftVibe((p.vibe as VibeType) ?? undefined);
       setRealPosts(posts);
       setFollowing(isFollowing);
+      setFollowerCount(count);
     } catch {} finally {
       setLoading(false);
     }
   }, [id, authUser?.id]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Real-time: atualiza contador de seguidores quando qualquer pessoa segue/deixa de seguir este lugar
+  useEffect(() => {
+    if (!realPlace) return;
+    const channel = supabase
+      .channel(`place_follows:${realPlace.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'place_follows', filter: `place_id=eq.${realPlace.id}` },
+        () => {
+          getPlaceFollowerCount(realPlace.id).then(setFollowerCount).catch(() => {});
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [realPlace?.id]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -139,13 +160,16 @@ export default function PlaceProfileScreen() {
   const handleFollow = async () => {
     if (!realPlace || !authUser) return;
     const next = !following;
+    // Optimistic: muda UI imediatamente; subscription corrige se houver erro
     setFollowing(next);
+    setFollowerCount(c => Math.max(0, c + (next ? 1 : -1)));
     setFollowLoading(true);
     try {
       if (next) await followPlace(authUser.id, realPlace.id);
       else await unfollowPlace(authUser.id, realPlace.id);
     } catch {
       setFollowing(!next);
+      setFollowerCount(c => Math.max(0, c + (next ? -1 : 1)));
     } finally {
       setFollowLoading(false);
     }
@@ -246,7 +270,17 @@ export default function PlaceProfileScreen() {
         }
       >
         <View style={[styles.cover, { paddingTop: insets.top + Spacing.lg }]}>
-          <Text style={styles.coverInitials}>{initials}</Text>
+          {place.thumbnail ? (
+            <>
+              <Image source={{ uri: place.thumbnail }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <LinearGradient
+                colors={['transparent', 'rgba(5,5,11,0.85)']}
+                style={StyleSheet.absoluteFill}
+              />
+            </>
+          ) : (
+            <Text style={styles.coverInitials}>{initials}</Text>
+          )}
           <View style={styles.tagsRow}>
             {(place.tags ?? []).slice(0, 3).map(tag => (
               <View key={tag} style={styles.tagPill}>
@@ -268,7 +302,7 @@ export default function PlaceProfileScreen() {
                   <MapPin color={Colors.primaryShade} size={13} strokeWidth={2.3} />
                   <Text style={styles.addressText} numberOfLines={1}>{place.address}</Text>
                   <Text style={styles.dotText}>·</Text>
-                  <Text style={styles.addressText}>{place.followers ?? 0} seguidores</Text>
+                  <Text style={styles.addressText}>{followerCount} seguidores</Text>
                 </View>
               </View>
             </View>
