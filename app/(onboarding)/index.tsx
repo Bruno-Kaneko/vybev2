@@ -180,15 +180,56 @@ function SlideItem({
   screenHeight: number;
   isWide: boolean;
 }) {
-  const scale = scrollX.interpolate({
-    inputRange: [(index - 1) * screenWidth, index * screenWidth, (index + 1) * screenWidth],
-    outputRange: [1.08, 1, 1.08],
+  // input range for transitions in/out
+  const inputRange = [(index - 1) * screenWidth, index * screenWidth, (index + 1) * screenWidth];
+
+  // Background: zoom sutil + pan horizontal lento (parallax depth)
+  const bgScale = scrollX.interpolate({
+    inputRange,
+    outputRange: [1.15, 1, 1.15],
+    extrapolate: 'clamp',
+  });
+  const bgTranslateX = scrollX.interpolate({
+    inputRange,
+    outputRange: [screenWidth * 0.3, 0, -screenWidth * 0.3],
     extrapolate: 'clamp',
   });
 
-  const translateY = scrollX.interpolate({
-    inputRange: [(index - 0.5) * screenWidth, index * screenWidth, (index + 0.5) * screenWidth],
-    outputRange: [30, 0, -30],
+  // Icon: entra do topo com bounce + scale
+  const iconTranslateY = scrollX.interpolate({
+    inputRange,
+    outputRange: [-80, 0, 80],
+    extrapolate: 'clamp',
+  });
+  const iconScale = scrollX.interpolate({
+    inputRange,
+    outputRange: [0.3, 1, 0.3],
+    extrapolate: 'clamp',
+  });
+  const iconRotate = scrollX.interpolate({
+    inputRange,
+    outputRange: ['-30deg', '0deg', '30deg'],
+    extrapolate: 'clamp',
+  });
+
+  // Title: vem da esquerda
+  const titleTranslateX = scrollX.interpolate({
+    inputRange,
+    outputRange: [-60, 0, 60],
+    extrapolate: 'clamp',
+  });
+
+  // Accent line: vem da direita, atrasado
+  const lineTranslateX = scrollX.interpolate({
+    inputRange,
+    outputRange: [100, 0, -100],
+    extrapolate: 'clamp',
+  });
+
+  // Subtitle: fade + translateY (mais lento)
+  const subtitleTranslateY = scrollX.interpolate({
+    inputRange,
+    outputRange: [40, 0, -40],
     extrapolate: 'clamp',
   });
 
@@ -200,7 +241,8 @@ function SlideItem({
 
   return (
     <View style={[styles.slide, { width: screenWidth, height: screenHeight }]}>
-      <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale }] }]}>
+      {/* Background com pan horizontal (parallax) — move metade da velocidade do foreground */}
+      <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: bgScale }, { translateX: bgTranslateX }] }]}>
         <Image source={{ uri: slide.bg }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       </Animated.View>
 
@@ -217,20 +259,47 @@ function SlideItem({
             maxWidth: isWide ? 620 : undefined,
             paddingHorizontal: isWide ? Spacing['4xl'] : Spacing['3xl'],
             paddingBottom: screenHeight * (isWide ? 0.24 : 0.28),
-            transform: [{ translateY }],
             opacity,
           },
         ]}
       >
-        <View style={[styles.iconBadge, { borderColor: slide.accent, backgroundColor: `${slide.accent}22` }]}>
+        <Animated.View
+          style={[
+            styles.iconBadge,
+            { borderColor: slide.accent, backgroundColor: `${slide.accent}22` },
+            { transform: [{ translateY: iconTranslateY }, { scale: iconScale }, { rotate: iconRotate }] },
+          ]}
+        >
           <slide.Icon color={slide.accent} size={34} strokeWidth={2.4} />
-        </View>
+        </Animated.View>
 
-        <Text style={[styles.title, isWide && styles.titleWide]}>{slide.title}</Text>
+        <Animated.Text
+          style={[
+            styles.title,
+            isWide && styles.titleWide,
+            { transform: [{ translateX: titleTranslateX }] },
+          ]}
+        >
+          {slide.title}
+        </Animated.Text>
 
-        <View style={[styles.accentLine, { backgroundColor: slide.accent }]} />
+        <Animated.View
+          style={[
+            styles.accentLine,
+            { backgroundColor: slide.accent },
+            { transform: [{ translateX: lineTranslateX }] },
+          ]}
+        />
 
-        <Text style={[styles.subtitle, isWide && styles.subtitleWide]}>{slide.subtitle}</Text>
+        <Animated.Text
+          style={[
+            styles.subtitle,
+            isWide && styles.subtitleWide,
+            { transform: [{ translateY: subtitleTranslateY }] },
+          ]}
+        >
+          {slide.subtitle}
+        </Animated.Text>
       </Animated.View>
     </View>
   );

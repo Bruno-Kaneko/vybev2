@@ -268,9 +268,9 @@ export default function PreferencesScreen() {
         {/* About */}
         <SectionHeader icon={Info} label="Sobre" />
         <View style={styles.card}>
-          <LinkRow icon={Shield} label="Termos de uso" onPress={() => {}} />
+          <LinkRow icon={Shield} label="Termos de uso" onPress={() => router.push('/legal/terms' as any)} />
           <Divider />
-          <LinkRow icon={Lock} label="Política de privacidade" onPress={() => {}} />
+          <LinkRow icon={Lock} label="Política de privacidade" onPress={() => router.push('/legal/privacy' as any)} />
           <Divider />
           <InfoRow label="Versão" value="1.0.0 (beta)" />
         </View>

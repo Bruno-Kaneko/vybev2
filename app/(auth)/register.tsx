@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft } from 'lucide-react-native';
+import { Check, ChevronLeft } from 'lucide-react-native';
 
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { signUp } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
@@ -24,6 +25,7 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
@@ -39,11 +41,25 @@ export default function RegisterScreen() {
       setMessage('A senha precisa ter pelo menos 8 caracteres.');
       return;
     }
+    if (!acceptedTerms) {
+      setIsError(true);
+      setMessage('Você precisa aceitar os Termos e a Política.');
+      return;
+    }
     setMessage('');
     setIsError(false);
     setLoading(true);
     try {
       await signUp(email.trim(), password, username.trim());
+      // Registra aceite após signup ter criado o profile
+      const now = new Date().toISOString();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({
+          terms_accepted_at: now,
+          privacy_accepted_at: now,
+        }).eq('id', user.id);
+      }
       router.replace('/(tabs)');
     } catch (e: any) {
       setIsError(true);
@@ -121,25 +137,35 @@ export default function RegisterScreen() {
               />
             </View>
 
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              activeOpacity={0.8}
+              onPress={() => setAcceptedTerms(v => !v)}
+            >
+              <View style={[styles.checkbox, acceptedTerms && styles.checkboxOn]}>
+                {acceptedTerms && <Check color={Colors.white} size={14} strokeWidth={3} />}
+              </View>
+              <Text style={styles.terms}>
+                Li e aceito os{' '}
+                <Text style={styles.termsLink} onPress={() => router.push('/legal/terms' as any)}>Termos de Uso</Text>
+                {' '}e a{' '}
+                <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy' as any)}>Política de Privacidade</Text>
+              </Text>
+            </TouchableOpacity>
+
             <VybeButton
               label="Criar minha conta"
               onPress={handleRegister}
               loading={loading}
               fullWidth
               size="lg"
+              disabled={!acceptedTerms}
               style={{ marginTop: Spacing.md }}
             />
 
             {message ? (
               <Text style={[styles.feedback, isError && styles.feedbackError]}>{message}</Text>
             ) : null}
-
-            <Text style={styles.terms}>
-              Ao criar conta voce concorda com os{' '}
-              <Text style={styles.termsLink}>Termos de Uso</Text>
-              {' '}e a{' '}
-              <Text style={styles.termsLink}>Politica de Privacidade</Text>
-            </Text>
           </View>
         </View>
       </ScrollView>
@@ -213,15 +239,33 @@ const styles = StyleSheet.create({
     color: Colors.textDisabled,
     marginTop: 6,
   },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6,
+    borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkboxOn: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondary,
+  },
   terms: {
+    flex: 1,
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
     color: Colors.textMuted,
-    textAlign: 'center',
     lineHeight: FontSize.sm * 1.6,
   },
   termsLink: {
     color: Colors.secondary,
+    textDecorationLine: 'underline',
   },
   feedback: {
     fontFamily: FontFamily.body,
