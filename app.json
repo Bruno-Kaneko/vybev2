@@ -45,6 +45,15 @@
           "locationAlwaysAndWhenInUsePermission": "O VYBE usa sua localização para mostrar onde as pessoas estão e conectar você com quem está perto.",
           "locationWhenInUsePermission": "O VYBE usa sua localização para mostrar onde as pessoas estão."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#FF2D78",
+          "defaultChannel": "default",
+          "sounds": []
+        }
       ]
     ],
     "scheme": "vybe",

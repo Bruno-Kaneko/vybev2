@@ -7,7 +7,7 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const TABLE_TO_TYPE: Record<string, string> = {
   messages: 'message',
   follows: 'follow',
-  post_likes: 'like',
+  reactions: 'reaction',
   comments: 'comment',
 };
 
@@ -33,15 +33,17 @@ serve(async (req) => {
     let notifText = '';
     let pushData: Record<string, string> = {};
 
-    if (type === 'like') {
+    if (type === 'reaction') {
       const { data: post } = await supabase.from('posts').select('user_id').eq('id', record.post_id).single();
       if (!post || post.user_id === record.user_id) return new Response('skip');
-      const { data: liker } = await supabase.from('profiles').select('username').eq('id', record.user_id).single();
+      const { data: actor } = await supabase.from('profiles').select('username').eq('id', record.user_id).single();
       targetUserId = post.user_id;
       actorId = record.user_id;
       postId = record.post_id;
-      body = `@${liker?.username} curtiu seu post 🔥`;
-      notifText = 'curtiu seu post';
+      const emoji = record.type === 'fire' ? '🔥' : '❤️';
+      const verb = record.type === 'fire' ? 'mandou fire em' : 'curtiu';
+      body = `@${actor?.username} ${verb} seu post ${emoji}`;
+      notifText = `${verb} seu post`;
       pushData = { type: 'reaction', postId: record.post_id };
 
     } else if (type === 'comment') {
