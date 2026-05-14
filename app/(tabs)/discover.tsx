@@ -59,6 +59,7 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('Todos');
   const [priceFilter, setPriceFilter] = useState<number | null>(null);
+  const [neighborhoodFilter, setNeighborhoodFilter] = useState<string | null>(null);
   const [amenities, setAmenities] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -126,12 +127,22 @@ export default function DiscoverScreen() {
         (activeCategory === 'Evento' && p.category === 'event') ||
         (activeCategory === 'Lounge' && p.category === 'lounge');
       const matchPrice = priceFilter === null || p.priceLevel === priceFilter;
+      const matchNeighborhood = !neighborhoodFilter || p.neighborhood === neighborhoodFilter;
       const matchMetro = !amenities.has('metro') || p.nearMetro;
       const matchParking = !amenities.has('parking') || p.hasParking;
       const matchSeating = !amenities.has('seating') || p.hasSeating;
-      return matchSearch && matchCat && matchPrice && matchMetro && matchParking && matchSeating;
+      return matchSearch && matchCat && matchPrice && matchNeighborhood && matchMetro && matchParking && matchSeating;
     });
-  }, [places, activeCategory, search, priceFilter, amenities]);
+  }, [places, activeCategory, search, priceFilter, neighborhoodFilter, amenities]);
+
+  // Bairros únicos (ordenados, ignora os mal-formados que começam com número)
+  const neighborhoods = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of places) {
+      if (p.neighborhood && !/^\d/.test(p.neighborhood)) set.add(p.neighborhood);
+    }
+    return [...set].sort();
+  }, [places]);
 
   // Map mode
   if (viewMode === 'map') {
@@ -228,6 +239,9 @@ export default function DiscoverScreen() {
             maxWidth={responsive.contentMaxWidth}
             priceFilter={priceFilter}
             setPriceFilter={setPriceFilter}
+            neighborhoodFilter={neighborhoodFilter}
+            setNeighborhoodFilter={setNeighborhoodFilter}
+            neighborhoods={neighborhoods}
             amenities={amenities}
             setAmenities={setAmenities}
             viewMode={viewMode}
@@ -268,6 +282,9 @@ function DiscoverHeader({
   maxWidth,
   priceFilter,
   setPriceFilter,
+  neighborhoodFilter,
+  setNeighborhoodFilter,
+  neighborhoods,
   amenities,
   setAmenities,
   viewMode,
@@ -287,6 +304,9 @@ function DiscoverHeader({
   maxWidth: number;
   priceFilter: number | null;
   setPriceFilter: (value: number | null) => void;
+  neighborhoodFilter: string | null;
+  setNeighborhoodFilter: (value: string | null) => void;
+  neighborhoods: string[];
   amenities: Set<string>;
   setAmenities: (fn: (prev: Set<string>) => Set<string>) => void;
   viewMode: ViewMode;
@@ -436,6 +456,27 @@ function DiscoverHeader({
             );
           }}
         />
+
+        {/* Neighborhood filter */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 40, flexGrow: 0, marginBottom: Spacing.sm }} contentContainerStyle={{ alignItems: 'center', gap: Spacing.sm, paddingRight: Spacing.xl }}>
+          <TouchableOpacity
+            onPress={() => setNeighborhoodFilter(null)}
+            style={[styles.categoryPill, neighborhoodFilter === null && styles.categoryPillActive]}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.categoryText, neighborhoodFilter === null && styles.categoryTextActive]}>Todos bairros</Text>
+          </TouchableOpacity>
+          {neighborhoods.map(n => (
+            <TouchableOpacity
+              key={n}
+              onPress={() => setNeighborhoodFilter(neighborhoodFilter === n ? null : n)}
+              style={[styles.categoryPill, neighborhoodFilter === n && styles.categoryPillActive]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.categoryText, neighborhoodFilter === n && styles.categoryTextActive]}>{n}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
         {/* Price filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 40, flexGrow: 0, marginBottom: Spacing.sm }} contentContainerStyle={{ alignItems: 'center', gap: Spacing.sm, paddingRight: Spacing.xl }}>

@@ -557,26 +557,36 @@ export async function setOnlineStatusVisibility(userId: string, show: boolean): 
 }
 
 // ────────────────────────────────────────────────
-// LIKES
+// REACTIONS (heart + fire)
+// Usa a tabela `reactions` (tem trigger que atualiza fire_count/heart_count nos posts)
 // ────────────────────────────────────────────────
 
-export async function hasLiked(postId: string, userId: string): Promise<boolean> {
+export type ReactionType = 'heart' | 'fire';
+
+export async function hasReacted(postId: string, userId: string, type: ReactionType): Promise<boolean> {
   const { data } = await supabase
-    .from('post_likes')
-    .select('user_id')
+    .from('reactions')
+    .select('id')
     .eq('post_id', postId)
     .eq('user_id', userId)
+    .eq('type', type)
     .maybeSingle();
   return !!data;
 }
 
-export async function likePost(postId: string, userId: string): Promise<void> {
-  await supabase.from('post_likes').insert({ post_id: postId, user_id: userId });
+export async function addReaction(postId: string, userId: string, type: ReactionType): Promise<void> {
+  await supabase.from('reactions').insert({ post_id: postId, user_id: userId, type });
 }
 
-export async function unlikePost(postId: string, userId: string): Promise<void> {
-  await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', userId);
+export async function removeReaction(postId: string, userId: string, type: ReactionType): Promise<void> {
+  await supabase.from('reactions').delete()
+    .eq('post_id', postId).eq('user_id', userId).eq('type', type);
 }
+
+// Aliases para heart (compatibilidade com código existente)
+export const hasLiked   = (postId: string, userId: string) => hasReacted(postId, userId, 'heart');
+export const likePost   = (postId: string, userId: string) => addReaction(postId, userId, 'heart');
+export const unlikePost = (postId: string, userId: string) => removeReaction(postId, userId, 'heart');
 
 // ────────────────────────────────────────────────
 // PUSH TOKENS

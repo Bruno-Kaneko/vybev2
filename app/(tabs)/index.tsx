@@ -20,11 +20,11 @@ import {
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, Bell, Check, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, UserPlus, Users, X } from 'lucide-react-native';
+import { ArrowUp, Bell, Check, Flame, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, UserPlus, Users, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_CHATS } from '@/constants/MockData';
-import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, getChats, notifyUser } from '@/lib/db';
+import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, hasReacted, addReaction, removeReaction, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationsContext';
@@ -1154,16 +1154,19 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [liked, setLiked] = useState(false);
+  const [fired, setFired] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const [shareChats, setShareChats] = useState<DBChat[]>([]);
   const likeScale = useState(new Animated.Value(1))[0];
+  const fireScale = useState(new Animated.Value(1))[0];
   const sendScale = useState(new Animated.Value(1))[0];
   const isRealPost = UUID_RE_FEED.test(post.id);
 
   useEffect(() => {
     if (!isRealPost || !user?.id) return;
     hasLiked(post.id, user.id).then(setLiked).catch(() => {});
+    hasReacted(post.id, user.id, 'fire').then(setFired).catch(() => {});
   }, [post.id, user?.id]);
 
   const handleLike = () => {
@@ -1183,6 +1186,27 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
         }
       } else {
         unlikePost(post.id, user.id).catch(() => {});
+      }
+    }
+  };
+
+  const handleFire = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Animated.sequence([
+      Animated.spring(fireScale, { toValue: 1.3, useNativeDriver: true, damping: 5, stiffness: 380 } as any),
+      Animated.spring(fireScale, { toValue: 1, useNativeDriver: true, damping: 8, stiffness: 260 } as any),
+    ]).start();
+    const next = !fired;
+    setFired(next);
+    if (isRealPost && user?.id) {
+      if (next) {
+        addReaction(post.id, user.id, 'fire').catch(() => {});
+        if (post.userId !== user.id) {
+          const actorName = user.user_metadata?.username ?? user.email?.split('@')[0] ?? 'Alguém';
+          notifyUser(post.userId, user.id, 'like', post.id, 'mandou fire no seu post', 'VYBE', `${actorName} 🔥 seu post`);
+        }
+      } else {
+        removeReaction(post.id, user.id, 'fire').catch(() => {});
       }
     }
   };
@@ -1219,6 +1243,7 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
   };
 
   const likeCount = post.reactions.heart + (liked ? 1 : 0);
+  const fireCount = post.reactions.fire + (fired ? 1 : 0);
 
   return (
     <View style={[
@@ -1274,6 +1299,17 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
             </TouchableOpacity>
           </Animated.View>
 
+          <Animated.View style={{ transform: [{ scale: fireScale }] }}>
+            <TouchableOpacity onPress={handleFire} style={styles.actionButton} activeOpacity={0.75}>
+              <Flame
+                color={fired ? Colors.gold : Colors.white}
+                fill={fired ? Colors.gold : 'transparent'}
+                size={20}
+                strokeWidth={2.2}
+              />
+            </TouchableOpacity>
+          </Animated.View>
+
           <TouchableOpacity
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id, autoComment: '1' } })}
             style={styles.actionButton}
@@ -1291,7 +1327,10 @@ function PostCard({ post, maxWidth, isPhone }: { post: Post; maxWidth: number; i
       </View>
 
       <View style={styles.postMeta}>
-        <Text style={styles.likes}>{likeCount} curtidas</Text>
+        <Text style={styles.likes}>
+          {likeCount} {likeCount === 1 ? 'curtida' : 'curtidas'}
+          {fireCount > 0 ? `  ·  ${fireCount} 🔥` : ''}
+        </Text>
         <Text style={styles.caption} numberOfLines={1}>
           <Text style={styles.captionUser}>{post.user.displayName} </Text>
           {post.caption}
