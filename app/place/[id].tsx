@@ -11,34 +11,15 @@ import {
   Heart, Info, MapPin, Music, Navigation, Radio, Share2, X,
 } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants';
-import { MOCK_PLACES } from '@/constants/MockData';
 import { Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import {
   getPlace, getPlaceActivePosts, submitPlaceReport,
-  isFollowingPlace, followPlace, unfollowPlace,
+  isFollowingPlace, followPlace, unfollowPlace, mapDBPlaceToPlace,
 } from '@/lib/db';
 import type { DBPlace } from '@/lib/db';
 import type { CrowdLevel, Place, Post, QueueLevel, VibeType } from '@/types';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Fallback extras for mock place IDs
-const PLACE_EXTRAS: Record<string, { parking?: { name: string; address: string }; metro?: { name: string; distanceM: number } }> = {
-  place1:  { parking: { name: 'Estacionamento Augusta',    address: 'R. Bela Cintra, 210 — Consolação' },      metro: { name: 'Consolação',            distanceM: 320 } },
-  place2:  { parking: { name: 'Park Paulista',             address: 'R. da Consolação, 222 — Consolação' },    metro: { name: 'Paulista',              distanceM: 210 } },
-  place3:  { parking: { name: 'Estac. Barra Funda',       address: 'Av. Olga, 420 — Barra Funda' },           metro: { name: 'Palmeiras-Barra Funda', distanceM: 380 } },
-  place4:  { parking: { name: 'Park Barra Funda',         address: 'R. Tagipurus, 120 — Barra Funda' },       metro: { name: 'Marechal Deodoro',      distanceM: 550 } },
-  place5:  { parking: { name: 'Estapar Augusta',          address: 'R. Augusta, 680 — Consolação' },          metro: { name: 'Consolação',            distanceM: 290 } },
-  place6:  { metro: { name: 'Vila Madalena',              distanceM: 480 } },
-  place7:  { parking: { name: 'Park Pinheiros',           address: 'R. dos Pinheiros, 140 — Pinheiros' },     metro: { name: 'Fradique Coutinho',     distanceM: 350 } },
-  place8:  { parking: { name: 'Estapar Liberdade',        address: 'R. Galvão Bueno, 54 — Liberdade' },       metro: { name: 'São Joaquim',           distanceM: 200 } },
-  place9:  { parking: { name: 'Park Lapa',                address: 'Av. Pompéia, 210 — Alto da Lapa' },       metro: { name: 'Água Branca',           distanceM: 900 } },
-  place10: { metro: { name: 'Vila Madalena',              distanceM: 520 } },
-  place11: { parking: { name: 'Estac. Clash',             address: 'R. Barra Funda, 1120 — Barra Funda' },    metro: { name: 'Palmeiras-Barra Funda', distanceM: 420 } },
-  place12: { parking: { name: 'Estapar Rebouças',         address: 'Av. Rebouças, 4060 — Pinheiros' },        metro: { name: 'Clínicas',              distanceM: 650 } },
-};
 
 const MOCK_EVENTS = [
   { id: 'e1', date: 'Sex, 02 Mai', time: '23:00', title: 'Open Format Night', dj: 'DJ Marquinhos', price: 'R$ 40' },
@@ -52,39 +33,13 @@ function copyToClipboard(text: string) {
   }
 }
 
-function mapDBPlace(p: DBPlace): Place {
-  return {
-    id: p.id,
-    name: p.name,
-    address: p.address,
-    category: p.category,
-    location: { latitude: p.lat, longitude: p.lng },
-    activePosts: 0,
-    activeUsers: 0,
-    followers: p.follower_count,
-    tags: p.tags ?? [],
-    neighborhood: p.neighborhood ?? undefined,
-    description: p.description ?? undefined,
-    priceLevel: (p.price_level as any) ?? undefined,
-    coverCharge: p.cover_charge ?? undefined,
-    nearMetro: p.near_metro,
-    hasParking: p.has_parking,
-    hasSeating: p.has_seating,
-    hasMenu: p.has_menu,
-    crowdLevel: (p.crowd_level as CrowdLevel) ?? undefined,
-    queueLevel: (p.queue_level as QueueLevel) ?? undefined,
-    vibe: (p.vibe as VibeType) ?? undefined,
-  };
-}
-
 export default function PlaceProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const responsive = useResponsive();
   const { user: authUser } = useAuth();
-  const isUUID = UUID_RE.test(id ?? '');
 
-  const [loading, setLoading] = useState(isUUID);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [realPlace, setRealPlace] = useState<DBPlace | null>(null);
   const [realPosts, setRealPosts] = useState<Post[]>([]);
@@ -100,51 +55,48 @@ export default function PlaceProfileScreen() {
   const slideAnim = useRef(new Animated.Value(400)).current;
   const reportSlideAnim = useRef(new Animated.Value(500)).current;
 
-  // Resolve place — real DB or mock fallback
-  const mockPlace = MOCK_PLACES.find(p => p.id === id) ?? MOCK_PLACES[0];
-  const place: Place = isUUID && realPlace ? mapDBPlace(realPlace) : mockPlace;
+  // Place vem 100% do banco (mapeado via helper compartilhado)
+  const place: Place | null = realPlace ? mapDBPlaceToPlace(realPlace) : null;
 
-  // Extras for metro/parking
+  // Extras de metrô/estacionamento (campos opcionais do schema rico)
   const extras = useMemo(() => {
-    if (isUUID && realPlace) {
-      return {
-        metro: realPlace.metro_name ? { name: realPlace.metro_name, distanceM: realPlace.metro_distance_m ?? 0 } : undefined,
-        parking: realPlace.parking_name ? { name: realPlace.parking_name, address: realPlace.parking_address ?? '' } : undefined,
-      };
-    }
-    return PLACE_EXTRAS[place.id] ?? {};
-  }, [isUUID, realPlace, place.id]);
+    if (!realPlace) return {} as { metro?: { name: string; distanceM: number }; parking?: { name: string; address: string } };
+    return {
+      metro: realPlace.metro_name ? { name: realPlace.metro_name, distanceM: realPlace.metro_distance_m ?? 0 } : undefined,
+      parking: realPlace.parking_name ? { name: realPlace.parking_name, address: realPlace.parking_address ?? '' } : undefined,
+    };
+  }, [realPlace]);
 
-  const [liveCrowd, setLiveCrowd] = useState<CrowdLevel | undefined>(mockPlace.crowdLevel);
-  const [liveQueue, setLiveQueue] = useState<QueueLevel | undefined>(mockPlace.queueLevel);
-  const [liveVibe, setLiveVibe] = useState<VibeType | undefined>(mockPlace.vibe);
-  const [draftCrowd, setDraftCrowd] = useState<CrowdLevel | undefined>(mockPlace.crowdLevel);
-  const [draftQueue, setDraftQueue] = useState<QueueLevel | undefined>(mockPlace.queueLevel);
-  const [draftVibe, setDraftVibe] = useState<VibeType | undefined>(mockPlace.vibe);
+  const [liveCrowd, setLiveCrowd] = useState<CrowdLevel | undefined>(undefined);
+  const [liveQueue, setLiveQueue] = useState<QueueLevel | undefined>(undefined);
+  const [liveVibe, setLiveVibe] = useState<VibeType | undefined>(undefined);
+  const [draftCrowd, setDraftCrowd] = useState<CrowdLevel | undefined>(undefined);
+  const [draftQueue, setDraftQueue] = useState<QueueLevel | undefined>(undefined);
+  const [draftVibe, setDraftVibe] = useState<VibeType | undefined>(undefined);
 
   const loadData = useCallback(async () => {
-    if (!isUUID || !id) return;
+    if (!id) return;
     try {
-      const [p, posts, isFollowing] = await Promise.all([
-        getPlace(id),
-        getPlaceActivePosts(id),
-        authUser ? isFollowingPlace(authUser.id, id) : Promise.resolve(false),
+      // Carrega o place primeiro pra ter o uuid interno (pode receber uuid ou google_place_id na URL)
+      const p = await getPlace(id);
+      if (!p) { setLoading(false); return; }
+      const [posts, isFollowing] = await Promise.all([
+        getPlaceActivePosts(p.id),
+        authUser ? isFollowingPlace(authUser.id, p.id) : Promise.resolve(false),
       ]);
-      if (p) {
-        setRealPlace(p);
-        setLiveCrowd((p.crowd_level as CrowdLevel) ?? undefined);
-        setLiveQueue((p.queue_level as QueueLevel) ?? undefined);
-        setLiveVibe((p.vibe as VibeType) ?? undefined);
-        setDraftCrowd((p.crowd_level as CrowdLevel) ?? undefined);
-        setDraftQueue((p.queue_level as QueueLevel) ?? undefined);
-        setDraftVibe((p.vibe as VibeType) ?? undefined);
-      }
+      setRealPlace(p);
+      setLiveCrowd((p.crowd_level as CrowdLevel) ?? undefined);
+      setLiveQueue((p.queue_level as QueueLevel) ?? undefined);
+      setLiveVibe((p.vibe as VibeType) ?? undefined);
+      setDraftCrowd((p.crowd_level as CrowdLevel) ?? undefined);
+      setDraftQueue((p.queue_level as QueueLevel) ?? undefined);
+      setDraftVibe((p.vibe as VibeType) ?? undefined);
       setRealPosts(posts);
       setFollowing(isFollowing);
     } catch {} finally {
       setLoading(false);
     }
-  }, [id, isUUID, authUser?.id]);
+  }, [id, authUser?.id]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -179,22 +131,19 @@ export default function PlaceProfileScreen() {
     setLiveVibe(draftVibe);
     setReportedAt(Date.now());
     setReportOpen(false);
-    if (isUUID && authUser && draftCrowd && draftQueue && draftVibe) {
-      submitPlaceReport(id, authUser.id, draftCrowd, draftQueue, draftVibe).catch(() => {});
+    if (realPlace && authUser && draftCrowd && draftQueue && draftVibe) {
+      submitPlaceReport(realPlace.id, authUser.id, draftCrowd, draftQueue, draftVibe).catch(() => {});
     }
   };
 
   const handleFollow = async () => {
-    if (!isUUID || !authUser) {
-      setFollowing(prev => !prev);
-      return;
-    }
+    if (!realPlace || !authUser) return;
     const next = !following;
     setFollowing(next);
     setFollowLoading(true);
     try {
-      if (next) await followPlace(authUser.id, id);
-      else await unfollowPlace(authUser.id, id);
+      if (next) await followPlace(authUser.id, realPlace.id);
+      else await unfollowPlace(authUser.id, realPlace.id);
     } catch {
       setFollowing(!next);
     } finally {
@@ -207,8 +156,8 @@ export default function PlaceProfileScreen() {
     setTimeout(() => setCopiedMsg(null), 2000);
   };
 
-  const initials = useMemo(() => getInitials(place.name), [place.name]);
-  const postsToShow = isUUID ? realPosts : [];
+  const initials = useMemo(() => place ? getInitials(place.name) : '', [place?.name]);
+  const postsToShow = realPosts;
 
   // Skeleton while loading real place
   if (loading) {
@@ -233,6 +182,24 @@ export default function PlaceProfileScreen() {
             {[0, 1, 2].map(i => <Skeleton key={i} width="31%" height={100} borderRadius={10} />)}
           </View>
         </View>
+      </View>
+    );
+  }
+
+  // Lugar não encontrado no banco
+  if (!place) {
+    return (
+      <View style={[styles.root, { backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl, gap: Spacing.md }]}>
+        <View style={[styles.topActions, { paddingTop: insets.top + Spacing.sm }]} pointerEvents="box-none">
+          <TouchableOpacity onPress={() => router.back()} style={styles.circleButton} activeOpacity={0.8}>
+            <ChevronLeft color={Colors.white} size={21} strokeWidth={2.4} />
+          </TouchableOpacity>
+        </View>
+        <MapPin color={Colors.textMuted} size={48} strokeWidth={1.5} />
+        <Text style={{ fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white }}>Lugar não encontrado</Text>
+        <Text style={{ fontFamily: FontFamily.body, fontSize: FontSize.sm, color: Colors.textMuted, textAlign: 'center' }}>
+          Esse lugar não está mais disponível no nosso catálogo.
+        </Text>
       </View>
     );
   }
@@ -270,14 +237,12 @@ export default function PlaceProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 94 }}
         refreshControl={
-          isUUID ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={Colors.secondary}
-              colors={[Colors.secondary]}
-            />
-          ) : undefined
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.secondary}
+            colors={[Colors.secondary]}
+          />
         }
       >
         <View style={[styles.cover, { paddingTop: insets.top + Spacing.lg }]}>

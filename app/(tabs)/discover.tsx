@@ -32,10 +32,9 @@ import {
 } from 'lucide-react-native';
 
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_PLACES, MOCK_POSTS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import PlaceMap from '@/components/ui/PlaceMap';
-import { getActivePostLocations, searchPostsByPlace, searchUsers } from '@/lib/db';
+import { getActivePostLocations, searchPostsByPlace, searchUsers, getPlaces, mapDBPlaceToPlace } from '@/lib/db';
 import type { DBUserResult } from '@/lib/db';
 import type { Place } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -63,9 +62,8 @@ export default function DiscoverScreen() {
   const [amenities, setAmenities] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
-  const [heatPoints, setHeatPoints] = useState<Array<{ lat: number; lng: number }>>(
-    MOCK_POSTS.map(p => ({ lat: p.location.latitude, lng: p.location.longitude }))
-  );
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [heatPoints, setHeatPoints] = useState<Array<{ lat: number; lng: number }>>([]);
   const [realResults, setRealResults] = useState<Array<{ place_name: string; lat: number; lng: number; count: number }>>([]);
   const [searchMode, setSearchMode] = useState<SearchMode>('lugares');
   const [userResults, setUserResults] = useState<DBUserResult[]>([]);
@@ -93,6 +91,13 @@ export default function DiscoverScreen() {
       .catch(() => {});
   }, []);
 
+  // Carrega lugares reais do banco (vindos do Google Places)
+  useEffect(() => {
+    getPlaces()
+      .then(rows => setPlaces(rows.map(mapDBPlaceToPlace)))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (!search.trim()) { setRealResults([]); setUserResults([]); return; }
@@ -112,7 +117,7 @@ export default function DiscoverScreen() {
   }, [search, searchMode, authUser?.id]);
 
   const filtered = useMemo(() => {
-    return MOCK_PLACES.filter(p => {
+    return places.filter(p => {
       const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
       const matchCat =
         activeCategory === 'Todos' ||
@@ -126,7 +131,7 @@ export default function DiscoverScreen() {
       const matchSeating = !amenities.has('seating') || p.hasSeating;
       return matchSearch && matchCat && matchPrice && matchMetro && matchParking && matchSeating;
     });
-  }, [activeCategory, search, priceFilter, amenities]);
+  }, [places, activeCategory, search, priceFilter, amenities]);
 
   // Map mode
   if (viewMode === 'map') {

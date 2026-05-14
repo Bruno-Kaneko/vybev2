@@ -746,25 +746,29 @@ export async function notifyUser(
 
 export type DBPlace = {
   id: string;
+  google_place_id: string | null;
   name: string;
   address: string;
-  category: 'club' | 'bar' | 'event' | 'lounge';
+  category: 'club' | 'bar' | 'event' | 'lounge' | null;
   lat: number;
   lng: number;
   neighborhood: string | null;
   description: string | null;
-  tags: string[];
+  tags: string[] | null;
+  types: string[] | null;
+  primary_type: string | null;
+  photo_ref: string | null;
   price_level: number | null;
   cover_charge: number | null;
-  near_metro: boolean;
-  has_parking: boolean;
-  has_seating: boolean;
-  has_menu: boolean;
+  near_metro: boolean | null;
+  has_parking: boolean | null;
+  has_seating: boolean | null;
+  has_menu: boolean | null;
   metro_name: string | null;
   metro_distance_m: number | null;
   parking_name: string | null;
   parking_address: string | null;
-  follower_count: number;
+  follower_count: number | null;
   crowd_level: string | null;
   queue_level: string | null;
   vibe: string | null;
@@ -772,14 +776,66 @@ export type DBPlace = {
   created_at: string;
 };
 
-export async function getPlace(placeId: string): Promise<DBPlace | null> {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Mapeia tipos do Google → categoria do app
+export function googleTypesToCategory(types: string[] | null, primaryType: string | null): 'club' | 'bar' | 'lounge' {
+  const all = [...(types ?? []), primaryType ?? ''];
+  if (all.includes('night_club')) return 'club';
+  if (all.includes('bar') || all.includes('pub')) return 'bar';
+  return 'lounge';
+}
+
+// getPlace aceita tanto UUID (places.id) quanto google_place_id (text "ChIJ...")
+export async function getPlace(placeIdOrGoogleId: string): Promise<DBPlace | null> {
+  const isGoogleId = !UUID_RE.test(placeIdOrGoogleId);
+  const column = isGoogleId ? 'google_place_id' : 'id';
   const { data, error } = await supabase
     .from('places')
     .select('*')
-    .eq('id', placeId)
-    .single();
+    .eq(column, placeIdOrGoogleId)
+    .maybeSingle();
   if (error || !data) return null;
   return data as DBPlace;
+}
+
+// Lista todos os lugares do banco (com lat/lng válidos)
+export async function getPlaces(): Promise<DBPlace[]> {
+  const { data, error } = await supabase
+    .from('places')
+    .select('*')
+    .not('lat', 'is', null)
+    .not('lng', 'is', null)
+    .order('name', { ascending: true });
+  if (error || !data) return [];
+  return data as DBPlace[];
+}
+
+// Mapeia DBPlace → Place do app (deriva category dos tipos do Google quando ausente)
+export function mapDBPlaceToPlace(p: DBPlace): import('@/types').Place {
+  const category = p.category ?? googleTypesToCategory(p.types, p.primary_type);
+  return {
+    id: p.id,
+    name: p.name,
+    address: p.address,
+    category,
+    location: { latitude: p.lat, longitude: p.lng },
+    activePosts: 0,
+    activeUsers: 0,
+    followers: p.follower_count ?? 0,
+    tags: p.tags ?? [],
+    neighborhood: p.neighborhood ?? undefined,
+    description: p.description ?? undefined,
+    priceLevel: (p.price_level as any) ?? undefined,
+    coverCharge: p.cover_charge ?? undefined,
+    nearMetro: p.near_metro ?? false,
+    hasParking: p.has_parking ?? false,
+    hasSeating: p.has_seating ?? false,
+    hasMenu: p.has_menu ?? false,
+    crowdLevel: (p.crowd_level as any) ?? undefined,
+    queueLevel: (p.queue_level as any) ?? undefined,
+    vibe: (p.vibe as any) ?? undefined,
+  };
 }
 
 export async function getPlaceActivePosts(placeId: string): Promise<Post[]> {
