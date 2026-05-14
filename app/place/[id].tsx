@@ -177,6 +177,12 @@ export default function PlaceProfileScreen() {
   const initials = useMemo(() => place ? getInitials(place.name) : '', [place?.name]);
   const postsToShow = realPosts;
 
+  // URLs com tamanhos otimizados pra cada uso (Google CDN aceita size token na URL)
+  const stripSize = (url: string | undefined) => url?.replace(/=[swhc\d-]+$/, '') ?? '';
+  const baseUrl = place ? stripSize(place.thumbnail) : '';
+  const coverPhotoUrl  = baseUrl ? `${baseUrl}=w1600-h900` : '';
+  const avatarPhotoUrl = baseUrl ? `${baseUrl}=w200-h200-c` : '';
+
   // Skeleton while loading real place
   if (loading) {
     return (
@@ -266,7 +272,7 @@ export default function PlaceProfileScreen() {
         <View style={[styles.cover, { paddingTop: insets.top + Spacing.lg }]}>
           {place.thumbnail ? (
             <>
-              <Image source={{ uri: place.thumbnail }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <Image source={{ uri: coverPhotoUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
               <LinearGradient
                 colors={['transparent', 'rgba(5,5,11,0.85)']}
                 style={StyleSheet.absoluteFill}
@@ -288,7 +294,11 @@ export default function PlaceProfileScreen() {
           <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
             <View style={styles.identityRow}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initials}</Text>
+                {avatarPhotoUrl ? (
+                  <Image source={{ uri: avatarPhotoUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{initials}</Text>
+                )}
               </View>
               <View style={styles.identityCopy}>
                 <Text style={styles.placeName}>{place.name}</Text>
@@ -680,8 +690,10 @@ const styles = StyleSheet.create({
   avatar: {
     width: 76, height: 76, borderRadius: 38,
     backgroundColor: '#32184F', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
   avatarText: { fontFamily: FontFamily.heading, fontSize: FontSize['2xl'], color: Colors.secondary },
+  avatarImage: { width: 76, height: 76, borderRadius: 38 },
   identityCopy: { flex: 1, minWidth: 0 },
   placeName: { fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },

@@ -812,13 +812,19 @@ export async function getPlaces(): Promise<DBPlace[]> {
   return data as DBPlace[];
 }
 
+// Helper: troca o size token da URL CDN do Google por outro
+// Ex: ".../foo=s4800-w400" → ".../foo=w1200-h600"
+function withPhotoSize(url: string | null | undefined, size: string): string | undefined {
+  if (!url) return undefined;
+  const base = url.replace(/=[swhc\d-]+$/, '');
+  return `${base}=${size}`;
+}
+
 // Mapeia DBPlace → Place do app (deriva category dos tipos do Google quando ausente)
 export function mapDBPlaceToPlace(p: DBPlace): import('@/types').Place {
   const category = p.category ?? googleTypesToCategory(p.types, p.primary_type);
-  // Usa a URL CDN já resolvida (preenchida pelo script resolve-photo-urls.mjs).
-  // Em fallback raro (URL ainda não resolvida), retorna undefined em vez de tentar o endpoint Places API
-  // (que retorna 404 quando carregado direto pelo <Image>).
-  const thumbnail = p.photo_url ?? undefined;
+  // thumbnail = imagem média (cards, ~400px wide)
+  const thumbnail = withPhotoSize(p.photo_url, 'w600');
   return {
     id: p.id,
     name: p.name,
