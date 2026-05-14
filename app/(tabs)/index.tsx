@@ -23,12 +23,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Flame, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, UserPlus, Users, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_CHATS } from '@/constants/MockData';
 import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, hasReacted, addReaction, removeReaction, getChats, notifyUser } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationsContext';
-import { Avatar, BrandLogo, PostTimer } from '@/components/ui';
+import { Avatar, BrandLogo, PostTimer, Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import * as Location from 'expo-location';
 import type { Post } from '@/types';
@@ -66,6 +65,7 @@ export default function HomeScreen() {
   const [groupChatOpen, setGroupChatOpen] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(true);
   const [realChats, setRealChats] = useState<DBChat[]>([]);
 
   const { notifications: notifs, unreadCount, markAllAsRead, dismiss, seenAt: notifSeenAt, isUnread: isNotifUnread } = useNotifications();
@@ -100,6 +100,8 @@ export default function HomeScreen() {
     } catch {
       setGeralPosts([]);
       setSeguindoPosts([]);
+    } finally {
+      setFeedLoading(false);
     }
   }, [authUserHome?.id]);
 
@@ -209,9 +211,11 @@ export default function HomeScreen() {
           <PostCard post={item} maxWidth={responsive.feedMaxWidth} isPhone={responsive.isPhone} />
         )}
         ListEmptyComponent={
-          !refreshing
-            ? <FeedEmptyState tab={activeTab} locationDenied={locationDenied} locationLoading={locationLoading} />
-            : null
+          feedLoading
+            ? <FeedSkeleton />
+            : !refreshing
+              ? <FeedEmptyState tab={activeTab} locationDenied={locationDenied} locationLoading={locationLoading} />
+              : null
         }
       />
       <MessagesDrawer
@@ -247,6 +251,30 @@ export default function HomeScreen() {
           onLeave={handleLeave}
         />
       )}
+    </View>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <View style={{ paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, gap: Spacing.lg }}>
+      {[0, 1].map(i => (
+        <View key={i} style={{ gap: Spacing.sm }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+            <Skeleton width={40} height={40} borderRadius={20} />
+            <View style={{ flex: 1, gap: 6 }}>
+              <Skeleton width={120} height={12} borderRadius={6} />
+              <Skeleton width={80} height={10} borderRadius={5} />
+            </View>
+          </View>
+          <Skeleton width="100%" height={400} borderRadius={16} />
+          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+            <Skeleton width={24} height={24} borderRadius={12} />
+            <Skeleton width={24} height={24} borderRadius={12} />
+            <Skeleton width={24} height={24} borderRadius={12} />
+          </View>
+        </View>
+      ))}
     </View>
   );
 }

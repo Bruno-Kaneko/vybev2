@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircle } from 'lucide-react-native';
 
 import { Colors, FontFamily, FontSize, Spacing, CHAT_LIFETIME_MS } from '@/constants';
-import { Avatar, Badge } from '@/components/ui';
+import { Avatar, Badge, Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { getChats } from '@/lib/db';
@@ -46,6 +46,7 @@ export default function ChatListScreen() {
   const { user } = useAuth();
   const [rows, setRows] = useState<RowItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const load = useCallback(async () => {
@@ -55,6 +56,8 @@ export default function ChatListScreen() {
       setRows(real.map(c => toRowItem(c, user.id)));
     } catch {
       setRows([]);
+    } finally {
+      setLoading(false);
     }
   }, [user?.id]);
 
@@ -106,11 +109,25 @@ export default function ChatListScreen() {
         }
         renderItem={({ item }) => <ChatRow row={item} maxWidth={responsive.contentMaxWidth} />}
         ListEmptyComponent={
-          <View style={[styles.empty, { maxWidth: responsive.contentMaxWidth }]}>
-            <MessageCircle color={Colors.textMuted} size={54} strokeWidth={1.8} />
-            <Text style={styles.emptyTitle}>Nenhuma mensagem ainda</Text>
-            <Text style={styles.emptySub}>Converse com quem está na mesma festa.</Text>
-          </View>
+          loading ? (
+            <View style={{ width: '100%', maxWidth: responsive.contentMaxWidth, gap: Spacing.md, paddingTop: Spacing.md }}>
+              {[0, 1, 2, 3].map(i => (
+                <View key={i} style={{ flexDirection: 'row', gap: Spacing.md, alignItems: 'center', paddingVertical: Spacing.sm }}>
+                  <Skeleton width={48} height={48} borderRadius={24} />
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width="40%" height={14} borderRadius={6} />
+                    <Skeleton width="70%" height={11} borderRadius={5} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.empty, { maxWidth: responsive.contentMaxWidth }]}>
+              <MessageCircle color={Colors.textMuted} size={54} strokeWidth={1.8} />
+              <Text style={styles.emptyTitle}>Nenhuma mensagem ainda</Text>
+              <Text style={styles.emptySub}>Converse com quem está na mesma festa.</Text>
+            </View>
+          )
         }
       />
     </View>

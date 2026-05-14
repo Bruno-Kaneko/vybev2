@@ -13,7 +13,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, ChevronLeft, LockKeyhole, Timer } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius, CHAT_LIFETIME_MS } from '@/constants';
-import { MOCK_USERS, MOCK_CHATS } from '@/constants/MockData';
 import { Avatar } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
@@ -90,13 +89,8 @@ export default function ChatScreen() {
 
   const isReal = UUID_RE.test(id ?? '');
 
-  const [otherName, setOtherName] = useState(() => {
-    const mock = MOCK_USERS.find(u => u.id === id);
-    return mock?.displayName ?? 'Usuário';
-  });
-  const [otherAvatar, setOtherAvatar] = useState(() => {
-    return MOCK_USERS.find(u => u.id === id)?.avatar ?? '';
-  });
+  const [otherName, setOtherName] = useState('Usuário');
+  const [otherAvatar, setOtherAvatar] = useState('');
   const [otherLastSeen, setOtherLastSeen] = useState<number | null>(null);
   const [otherShowOnlineStatus, setOtherShowOnlineStatus] = useState(true);
 
@@ -112,9 +106,8 @@ export default function ChatScreen() {
     }).catch(() => {});
   }, [id, isReal]);
 
-  // Timer — for mock chats use mock data; for real chats use DB created_at
-  const mockChat = MOCK_CHATS.find(c => c.participants.some(p => p.id === id));
-  const expiresAt = isReal ? chatExpiresAt : (mockChat ? mockChat.createdAt + CHAT_LIFETIME_MS : Date.now() + CHAT_LIFETIME_MS);
+  // Timer — usa DB created_at (chats reais) ou cria timer fresh (caso edge)
+  const expiresAt = isReal ? chatExpiresAt : Date.now() + CHAT_LIFETIME_MS;
 
   useEffect(() => {
     const tick = () => setRemaining(Math.max(0, expiresAt - Date.now()));

@@ -35,8 +35,10 @@ import {
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { useResponsive } from '@/hooks/useResponsive';
 import PlaceMap from '@/components/ui/PlaceMap';
+import { Skeleton } from '@/components/ui';
 import { getActivePostLocations, searchPostsByPlace, searchUsers, getPlaces, mapDBPlaceToPlace } from '@/lib/db';
 import type { DBUserResult } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import type { Place } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -67,6 +69,7 @@ export default function DiscoverScreen() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [heatPoints, setHeatPoints] = useState<Array<{ lat: number; lng: number }>>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [placesLoading, setPlacesLoading] = useState(true);
   const [realResults, setRealResults] = useState<Array<{ place_name: string; lat: number; lng: number; count: number }>>([]);
   const [searchMode, setSearchMode] = useState<SearchMode>('lugares');
   const [userResults, setUserResults] = useState<DBUserResult[]>([]);
@@ -88,17 +91,32 @@ export default function DiscoverScreen() {
     });
   }, []);
 
-  useEffect(() => {
-    getActivePostLocations()
-      .then(pts => { if (pts.length > 0) setHeatPoints(pts); })
-      .catch(() => {});
+  const loadHeatPoints = useCallback(async () => {
+    try {
+      const pts = await getActivePostLocations();
+      setHeatPoints(pts);
+    } catch {}
   }, []);
+
+  useEffect(() => { loadHeatPoints(); }, [loadHeatPoints]);
+
+  // Real-time: heatmap atualiza quando alguém posta ou um post expira
+  useEffect(() => {
+    const channel = supabase
+      .channel('discover_heatmap')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+        loadHeatPoints();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadHeatPoints]);
 
   const loadPlaces = useCallback(async () => {
     try {
       const rows = await getPlaces();
       setPlaces(rows.map(mapDBPlaceToPlace));
     } catch {}
+    finally { setPlacesLoading(false); }
   }, []);
 
   // Carrega lugares reais do banco (vindos do Google Places)
@@ -106,12 +124,9 @@ export default function DiscoverScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([
-      loadPlaces(),
-      getActivePostLocations().then(pts => setHeatPoints(pts)).catch(() => {}),
-    ]);
+    await Promise.all([loadPlaces(), loadHeatPoints()]);
     setRefreshing(false);
-  }, [loadPlaces]);
+  }, [loadPlaces, loadHeatPoints]);
 
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
@@ -277,15 +292,30 @@ export default function DiscoverScreen() {
           />
         }
         ListEmptyComponent={
-          <View style={[styles.emptyState, { maxWidth: responsive.contentMaxWidth }]}>
-            <Search color={Colors.textMuted} size={32} strokeWidth={2} />
-            <Text style={styles.emptyTitle}>
-              {searchMode === 'pessoas' ? 'Nenhum usuário encontrado' : 'Nenhum lugar encontrado'}
-            </Text>
-            <Text style={styles.emptyText}>
-              {searchMode === 'pessoas' ? 'Tente outro nome ou username.' : 'Tente outro filtro ou uma busca mais curta.'}
-            </Text>
-          </View>
+          placesLoading && searchMode === 'lugares' ? (
+            <View style={{ width: '100%', maxWidth: responsive.contentMaxWidth, gap: Spacing.md, paddingTop: Spacing.md }}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <View key={i} style={{ flexDirection: 'row', gap: Spacing.md, paddingVertical: Spacing.sm }}>
+                  <Skeleton width={110} height={110} borderRadius={12} />
+                  <View style={{ flex: 1, gap: 6, paddingVertical: Spacing.sm }}>
+                    <Skeleton width="70%" height={16} borderRadius={6} />
+                    <Skeleton width="40%" height={12} borderRadius={5} />
+                    <Skeleton width="85%" height={11} borderRadius={5} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.emptyState, { maxWidth: responsive.contentMaxWidth }]}>
+              <Search color={Colors.textMuted} size={32} strokeWidth={2} />
+              <Text style={styles.emptyTitle}>
+                {searchMode === 'pessoas' ? 'Nenhum usuário encontrado' : 'Nenhum lugar encontrado'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {searchMode === 'pessoas' ? 'Tente outro nome ou username.' : 'Tente outro filtro ou uma busca mais curta.'}
+              </Text>
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <PlaceCard place={item} columns={responsive.columns} maxWidth={responsive.contentMaxWidth} />

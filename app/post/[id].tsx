@@ -9,7 +9,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, ChevronLeft, Heart, MapPin, MessageCircle, Send } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, PostTimer, Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
@@ -20,8 +19,6 @@ import type { Post } from '@/types';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const MOCK_FALLBACK_COMMENTS: DBComment[] = [];
-
 export default function PostDetailScreen() {
   const { id, autoComment } = useLocalSearchParams<{ id: string; autoComment?: string }>();
   const insets = useSafeAreaInsets();
@@ -29,10 +26,8 @@ export default function PostDetailScreen() {
   const { user } = useAuth();
   const isReal = UUID_RE.test(id ?? '');
 
-  const [post, setPost] = useState<Post | null>(
-    isReal ? null : (MOCK_POSTS.find(p => p.id === id) ?? MOCK_POSTS[0])
-  );
-  const [loading, setLoading] = useState(isReal);
+  const [post, setPost] = useState<Post | null>(null);
+  const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const likeScale = useRef(new Animated.Value(1)).current;
 
@@ -44,12 +39,12 @@ export default function PostDetailScreen() {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [sending, setSending] = useState(false);
-  const [comments, setComments] = useState<DBComment[]>(MOCK_FALLBACK_COMMENTS);
+  const [comments, setComments] = useState<DBComment[]>([]);
   const commentRef = useRef<TextInput>(null);
   const commentReveal = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!isReal) return;
+    if (!isReal) { setLoading(false); return; }
     setLoading(true);
     Promise.all([
       getPost(id),
@@ -58,7 +53,7 @@ export default function PostDetailScreen() {
       if (p) setPost(p);
       setComments(c);
     }).finally(() => setLoading(false));
-  }, [id]);
+  }, [id, isReal]);
 
   // Real-time: novos comentários aparecem ao vivo
   useEffect(() => {
@@ -147,6 +142,21 @@ export default function PostDetailScreen() {
       setShared(false);
     }
   };
+
+  if (!loading && !post) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md }]}>
+        <MapPin color={Colors.textMuted} size={48} strokeWidth={1.5} />
+        <Text style={{ fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white }}>Post não encontrado</Text>
+        <Text style={{ fontFamily: FontFamily.body, fontSize: FontSize.sm, color: Colors.textMuted, textAlign: 'center' }}>
+          Este post já expirou ou foi removido.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.md, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border }}>
+          <Text style={{ fontFamily: FontFamily.bodyMedium, fontSize: FontSize.md, color: Colors.white }}>Voltar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (loading || !post) {
     return (

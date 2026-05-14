@@ -18,7 +18,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AtSign, ChevronLeft, Flag, Grid3X3, MapPin, MessageCircle, MoreHorizontal, Share2, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { MOCK_USERS, MOCK_POSTS } from '@/constants/MockData';
 import { Avatar, Skeleton, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
@@ -86,26 +85,20 @@ export default function ProfileScreen() {
   const [requestLoading, setRequestLoading] = useState(false);
 
   const loadProfile = useCallback(async (silent = false) => {
-    if (!id) return;
+    if (!id || !isReal) { setLoadingProfile(false); return; }
     if (!silent) setLoadingProfile(true);
-    if (isReal) {
-      try {
-        const [p, posts, followingResult, reqStatus] = await Promise.all([
-          getProfile(id),
-          getUserPosts(id),
-          authUser ? isFollowing(authUser.id, id) : Promise.resolve(false),
-          authUser && id !== authUser.id ? getFollowRequestStatus(authUser.id, id) : Promise.resolve('none' as FollowRequestStatus),
-        ]);
-        if (p) setProfileUser(p);
-        setUserPosts(posts);
-        setFollowing(followingResult);
-        setRequestStatus(reqStatus);
-      } catch {}
-    } else {
-      const mock = MOCK_USERS.find(u => u.id === id) ?? MOCK_USERS[0];
-      setProfileUser(mock);
-      setUserPosts(MOCK_POSTS.filter(p => p.userId === mock.id));
-    }
+    try {
+      const [p, posts, followingResult, reqStatus] = await Promise.all([
+        getProfile(id),
+        getUserPosts(id),
+        authUser ? isFollowing(authUser.id, id) : Promise.resolve(false),
+        authUser && id !== authUser.id ? getFollowRequestStatus(authUser.id, id) : Promise.resolve('none' as FollowRequestStatus),
+      ]);
+      if (p) setProfileUser(p);
+      setUserPosts(posts);
+      setFollowing(followingResult);
+      setRequestStatus(reqStatus);
+    } catch {}
     setLoadingProfile(false);
   }, [id, isReal, authUser?.id]);
 
@@ -127,8 +120,6 @@ export default function ProfileScreen() {
     await loadProfile(true);
     setRefreshing(false);
   }, [loadProfile]);
-
-  const user = profileUser ?? MOCK_USERS[0];
 
   const handleFollow = async () => {
     if (!authUser || !id) return;
@@ -206,7 +197,22 @@ export default function ProfileScreen() {
     } catch {}
   };
 
-  if (loadingProfile && isReal) {
+  if (!isReal || (!loadingProfile && !profileUser)) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md }]}>
+        <MapPin color={Colors.textMuted} size={48} strokeWidth={1.5} />
+        <Text style={{ fontFamily: FontFamily.heading, fontSize: FontSize.xl, color: Colors.white }}>Perfil não encontrado</Text>
+        <Text style={{ fontFamily: FontFamily.body, fontSize: FontSize.sm, color: Colors.textMuted, textAlign: 'center' }}>
+          Este usuário não existe ou foi removido.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.md, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border }}>
+          <Text style={{ fontFamily: FontFamily.bodyMedium, fontSize: FontSize.md, color: Colors.white }}>Voltar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (loadingProfile) {
     return (
       <View style={[styles.root, { paddingTop: insets.top }]}>
         <View style={[styles.content, { paddingHorizontal: responsive.pagePadding, paddingTop: Spacing.md, alignItems: 'center' }]}>
@@ -232,6 +238,9 @@ export default function ProfileScreen() {
       </View>
     );
   }
+
+  // Após os returns acima, profileUser é garantidamente non-null
+  const user = profileUser!;
 
   return (
     <>
