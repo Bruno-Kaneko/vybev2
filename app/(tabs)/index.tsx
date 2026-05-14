@@ -1409,7 +1409,7 @@ const styles = StyleSheet.create({
   feedTabBar: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     paddingBottom: Spacing.lg,
     gap: Spacing.xl,
   },
@@ -1425,9 +1425,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   feedTabLabelActive: {
-    fontFamily: FontFamily.heading,
+    fontFamily: FontFamily.bodySemiBold,
     color: Colors.white,
-    fontSize: FontSize.xl,
+    fontSize: FontSize.md,
     letterSpacing: 0.3,
   },
   feedTabIndicator: {
