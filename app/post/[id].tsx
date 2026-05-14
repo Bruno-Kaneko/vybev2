@@ -15,6 +15,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
 import { getPost, getComments, addComment, hasLiked, likePost, unlikePost, notifyUser } from '@/lib/db';
 import type { DBComment } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import type { Post } from '@/types';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,6 +60,20 @@ export default function PostDetailScreen() {
     }).finally(() => setLoading(false));
   }, [id]);
 
+  // Real-time: novos comentários aparecem ao vivo
+  useEffect(() => {
+    if (!isReal) return;
+    const channel = supabase
+      .channel(`comments:${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${id}` },
+        () => { getComments(id).then(setComments).catch(() => {}); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, isReal]);
+
   useEffect(() => {
     if (autoComment === '1') setCommentOpen(true);
   }, []);
@@ -78,6 +93,21 @@ export default function PostDetailScreen() {
     const text = commentText.trim();
     setCommentText('');
     if (isReal && user?.id) {
+      // Optimistic: aparece na lista na hora (a subscription corrige depois com o real)
+      const tempId = `temp_${Date.now()}`;
+      setComments(prev => [...prev, {
+        id: tempId,
+        post_id: id,
+        user_id: user.id,
+        text,
+        created_at: new Date().toISOString(),
+        profiles: {
+          id: user.id,
+          username: user.user_metadata?.username ?? 'eu',
+          display_name: null,
+          avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
+        },
+      }]);
       setSending(true);
       try {
         await addComment(id, user.id, text);
@@ -87,7 +117,10 @@ export default function PostDetailScreen() {
           const actorName = user.user_metadata?.username ?? user.email?.split('@')[0] ?? 'Alguém';
           notifyUser(post.userId, user.id, 'comment', id, 'comentou no seu post', 'VYBE', `${actorName} comentou: ${text.slice(0, 60)}`);
         }
-      } catch {} finally {
+      } catch {
+        // Se falhou, remove o temp
+        setComments(prev => prev.filter(c => c.id !== tempId));
+      } finally {
         setSending(false);
       }
     } else {
