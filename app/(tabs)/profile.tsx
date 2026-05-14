@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,6 +54,7 @@ export default function MyProfileScreen() {
   const [profileStats, setProfileStats] = useState({ followers: 0, following: 0, points: 0 });
   const [postToDelete, setPostToDelete] = useState<Post | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleDeletePost = async () => {
     if (!postToDelete) return;
@@ -107,6 +109,17 @@ export default function MyProfileScreen() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `follower_id=eq.${user.id}` }, reloadStats)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+  }, [user?.id, reloadStats]);
+
+  const handleRefresh = useCallback(async () => {
+    if (!user?.id) return;
+    setRefreshing(true);
+    try {
+      const posts = await getUserPosts(user.id);
+      setMyPosts(posts);
+      reloadStats();
+    } catch {}
+    setRefreshing(false);
   }, [user?.id, reloadStats]);
 
   const rawUsername = localUsername ?? user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'usuario';
@@ -214,6 +227,14 @@ export default function MyProfileScreen() {
         },
       ]}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor={Colors.secondary}
+          colors={[Colors.secondary]}
+        />
+      }
     >
       <View style={[styles.shell, { maxWidth: responsive.contentMaxWidth }]}>
         <View style={styles.topRow}>

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Beer, Camera, Check, Crown, Gift, Heart, MapPin, Ticket, Users, X, type LucideIcon } from 'lucide-react-native';
@@ -35,16 +35,25 @@ export default function StoreScreen() {
   const uid = session?.user.id;
   const [userPoints, setUserPoints] = useState(0);
   const [collected, setCollected] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadStore = useCallback(async () => {
     if (!uid) return;
-    getProfile(uid).then(profile => {
-      if (profile?.points) setUserPoints(profile.points);
-    });
-    AsyncStorage.getItem(COLLECTED_KEY(uid))
-      .then(v => { if (v) { try { setCollected(new Set(JSON.parse(v) as string[])); } catch {} } })
-      .catch(() => {});
+    try {
+      const profile = await getProfile(uid);
+      if (profile?.points !== undefined) setUserPoints(profile.points);
+      const stored = await AsyncStorage.getItem(COLLECTED_KEY(uid));
+      if (stored) { try { setCollected(new Set(JSON.parse(stored) as string[])); } catch {} }
+    } catch {}
   }, [uid]);
+
+  useEffect(() => { loadStore(); }, [loadStore]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadStore();
+    setRefreshing(false);
+  }, [loadStore]);
   const [redeemReward, setRedeemReward] = useState<Reward | null>(null);
   const [redeemed, setRedeemed] = useState(false);
   const [rewardFilter, setRewardFilter] = useState<RewardFilter>('todos');
@@ -58,6 +67,14 @@ export default function StoreScreen() {
       <FlatList
         data={filteredRewards}
         keyExtractor={item => item.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.secondary}
+            colors={[Colors.secondary]}
+          />
+        }
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.listContent,

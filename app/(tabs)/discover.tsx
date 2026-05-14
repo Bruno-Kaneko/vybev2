@@ -11,6 +11,7 @@ import {
   Platform,
   Animated,
   Easing,
+  RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -65,6 +66,7 @@ export default function DiscoverScreen() {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [heatPoints, setHeatPoints] = useState<Array<{ lat: number; lng: number }>>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [realResults, setRealResults] = useState<Array<{ place_name: string; lat: number; lng: number; count: number }>>([]);
   const [searchMode, setSearchMode] = useState<SearchMode>('lugares');
   const [userResults, setUserResults] = useState<DBUserResult[]>([]);
@@ -92,12 +94,24 @@ export default function DiscoverScreen() {
       .catch(() => {});
   }, []);
 
-  // Carrega lugares reais do banco (vindos do Google Places)
-  useEffect(() => {
-    getPlaces()
-      .then(rows => setPlaces(rows.map(mapDBPlaceToPlace)))
-      .catch(() => {});
+  const loadPlaces = useCallback(async () => {
+    try {
+      const rows = await getPlaces();
+      setPlaces(rows.map(mapDBPlaceToPlace));
+    } catch {}
   }, []);
+
+  // Carrega lugares reais do banco (vindos do Google Places)
+  useEffect(() => { loadPlaces(); }, [loadPlaces]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadPlaces(),
+      getActivePostLocations().then(pts => setHeatPoints(pts)).catch(() => {}),
+    ]);
+    setRefreshing(false);
+  }, [loadPlaces]);
 
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
@@ -221,6 +235,14 @@ export default function DiscoverScreen() {
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.secondary}
+            colors={[Colors.secondary]}
+          />
+        }
         contentContainerStyle={[
           styles.listContent,
           {
