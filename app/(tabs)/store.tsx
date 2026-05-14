@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Beer, Camera, Check, Crown, Gift, Heart, MapPin, Ticket, Users, X, type LucideIcon } from 'lucide-react-native';
+import { Beer, Calendar, Camera, Check, Crown, Gift, Heart, MapPin, Ticket, Users, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { MOCK_REWARDS } from '@/constants/MockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getProfile, setProfilePoints } from '@/lib/db';
+import { getProfile, setProfilePoints, hasCheckedInToday, doDailyCheckin, DAILY_CHECKIN_POINTS } from '@/lib/db';
 import type { Reward } from '@/types';
 
 const COLLECTED_KEY = (uid: string) => `vybe_collected_earns:${uid}`;
@@ -36,16 +36,45 @@ export default function StoreScreen() {
   const [userPoints, setUserPoints] = useState(0);
   const [collected, setCollected] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  const [checkedInToday, setCheckedInToday] = useState(false);
+  const [checkinLoading, setCheckinLoading] = useState(false);
+  const [checkinMessage, setCheckinMessage] = useState<string | null>(null);
 
   const loadStore = useCallback(async () => {
     if (!uid) return;
     try {
-      const profile = await getProfile(uid);
+      const [profile, didCheckIn] = await Promise.all([
+        getProfile(uid),
+        hasCheckedInToday(uid),
+      ]);
       if (profile?.points !== undefined) setUserPoints(profile.points);
+      setCheckedInToday(didCheckIn);
       const stored = await AsyncStorage.getItem(COLLECTED_KEY(uid));
       if (stored) { try { setCollected(new Set(JSON.parse(stored) as string[])); } catch {} }
     } catch {}
   }, [uid]);
+
+  const handleCheckin = async () => {
+    if (!uid || checkedInToday || checkinLoading) return;
+    setCheckinLoading(true);
+    try {
+      const ok = await doDailyCheckin(uid);
+      if (ok) {
+        setCheckedInToday(true);
+        setUserPoints(p => p + DAILY_CHECKIN_POINTS);
+        setCheckinMessage(`+${DAILY_CHECKIN_POINTS} pontos!`);
+      } else {
+        setCheckedInToday(true);
+        setCheckinMessage('Você já fez check-in hoje');
+      }
+      setTimeout(() => setCheckinMessage(null), 3000);
+    } catch {
+      setCheckinMessage('Erro ao fazer check-in');
+      setTimeout(() => setCheckinMessage(null), 3000);
+    } finally {
+      setCheckinLoading(false);
+    }
+  };
 
   useEffect(() => { loadStore(); }, [loadStore]);
 
@@ -92,6 +121,38 @@ export default function StoreScreen() {
               <Text style={styles.pointsLabel}>Seus pontos</Text>
               <Text style={styles.pointsValue}>{userPoints}</Text>
             </View>
+
+            <TouchableOpacity
+              onPress={handleCheckin}
+              disabled={checkedInToday || checkinLoading}
+              style={[styles.checkinBtn, checkedInToday && styles.checkinBtnDone]}
+              activeOpacity={0.85}
+            >
+              <Calendar
+                color={checkedInToday ? Colors.textMuted : Colors.white}
+                size={22}
+                strokeWidth={2.2}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.checkinTitle, checkedInToday && { color: Colors.textMuted }]}>
+                  {checkedInToday ? 'Check-in feito hoje' : 'Check-in diário'}
+                </Text>
+                <Text style={styles.checkinSub}>
+                  {checkedInToday ? 'Volte amanhã pra ganhar mais' : `Ganhe +${DAILY_CHECKIN_POINTS} pontos`}
+                </Text>
+              </View>
+              {checkedInToday ? (
+                <Check color={Colors.success ?? '#22C55E'} size={22} strokeWidth={2.5} />
+              ) : (
+                <Text style={styles.checkinPoints}>+{DAILY_CHECKIN_POINTS}</Text>
+              )}
+            </TouchableOpacity>
+
+            {checkinMessage && (
+              <View style={styles.checkinMessage}>
+                <Text style={styles.checkinMessageText}>{checkinMessage}</Text>
+              </View>
+            )}
 
             <Text style={styles.sectionTitle}>Como ganhar pontos</Text>
             <View style={styles.earnGrid}>
@@ -292,6 +353,49 @@ const styles = StyleSheet.create({
     fontSize: FontSize['4xl'],
     color: Colors.gold,
     marginTop: Spacing.xs,
+  },
+  checkinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: 'rgba(255,45,120,0.12)',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,45,120,0.3)',
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  checkinBtnDone: {
+    backgroundColor: Colors.surface,
+    borderColor: Colors.border,
+  },
+  checkinTitle: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.md,
+    color: Colors.white,
+  },
+  checkinSub: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  checkinPoints: {
+    fontFamily: FontFamily.heading,
+    fontSize: FontSize.lg,
+    color: Colors.gold,
+  },
+  checkinMessage: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    borderRadius: Radius.full,
+  },
+  checkinMessageText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: FontSize.sm,
+    color: '#22C55E',
   },
   sectionTitle: {
     fontFamily: FontFamily.headingMedium,

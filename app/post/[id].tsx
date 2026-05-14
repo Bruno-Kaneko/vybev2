@@ -2,17 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, TextInput,
   KeyboardAvoidingView, Platform, Share as NativeShare, ScrollView,
-  Animated,
+  Animated, Modal,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowUp, ChevronLeft, Heart, MapPin, MessageCircle, Send } from 'lucide-react-native';
+import { ArrowUp, ChevronLeft, Flag, Heart, MapPin, MessageCircle, MoreHorizontal, Send, X } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { Avatar, PostTimer, Skeleton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getPost, getComments, addComment, hasLiked, likePost, unlikePost, notifyUser } from '@/lib/db';
+import { getPost, getComments, addComment, hasLiked, likePost, unlikePost, notifyUser, createReport } from '@/lib/db';
 import type { DBComment } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import type { Post } from '@/types';
@@ -37,6 +37,16 @@ export default function PostDetailScreen() {
   }, [id, user?.id]);
   const [shared, setShared] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportSent, setReportSent] = useState(false);
+
+  const handleReportPost = async (reason: string) => {
+    if (!user?.id) return;
+    try {
+      await createReport(user.id, 'post', id, reason);
+    } catch {}
+    setReportSent(true);
+  };
   const [commentText, setCommentText] = useState('');
   const [sending, setSending] = useState(false);
   const [comments, setComments] = useState<DBComment[]>([]);
@@ -198,7 +208,13 @@ export default function PostDetailScreen() {
             <ChevronLeft color={Colors.white} size={24} strokeWidth={2.4} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Post</Text>
-          <View style={{ width: 40 }} />
+          {user?.id && post.userId !== user.id ? (
+            <TouchableOpacity onPress={() => { setReportSent(false); setReportOpen(true); }} style={styles.backBtn} activeOpacity={0.8}>
+              <MoreHorizontal color={Colors.white} size={22} strokeWidth={2.2} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
         </View>
 
         <Image source={{ uri: post.imageUrl }} style={styles.image} resizeMode="cover" />
@@ -313,9 +329,87 @@ export default function PostDetailScreen() {
           </View>
         </Animated.View>
       </ScrollView>
+
+      <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
+        <TouchableOpacity style={reportStyles.overlay} activeOpacity={1} onPress={() => setReportOpen(false)}>
+          <View style={reportStyles.sheet} onStartShouldSetResponder={() => true}>
+            <View style={reportStyles.header}>
+              <Flag color={Colors.urgent} size={18} strokeWidth={2.2} />
+              <Text style={reportStyles.title}>Reportar post</Text>
+              <TouchableOpacity onPress={() => setReportOpen(false)} style={reportStyles.closeBtn}>
+                <X color={Colors.textMuted} size={18} strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+            {reportSent ? (
+              <View style={reportStyles.sentBox}>
+                <Text style={reportStyles.sentEmoji}>✅</Text>
+                <Text style={reportStyles.sentTitle}>Reporte enviado</Text>
+                <Text style={reportStyles.sentSub}>Nossa equipe vai analisar em até 24h.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={reportStyles.sub}>Por que está reportando este post?</Text>
+                {[
+                  'Conteúdo inapropriado',
+                  'Nudez ou sexual',
+                  'Violência',
+                  'Spam',
+                  'Discurso de ódio',
+                  'Outro',
+                ].map(reason => (
+                  <TouchableOpacity
+                    key={reason}
+                    style={reportStyles.option}
+                    activeOpacity={0.75}
+                    onPress={() => handleReportPost(reason)}
+                  >
+                    <Text style={reportStyles.optionText}>{reason}</Text>
+                    <ChevronLeft color={Colors.textMuted} size={14} strokeWidth={2} style={{ transform: [{ rotate: '180deg' }] }} />
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
+
+const reportStyles = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl,
+  },
+  sheet: {
+    width: '100%', maxWidth: 380, backgroundColor: Colors.surface,
+    borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border,
+    padding: Spacing.lg, gap: Spacing.sm,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingBottom: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  title: { flex: 1, fontFamily: FontFamily.heading, fontSize: FontSize.lg, color: Colors.white },
+  closeBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  sub: {
+    fontFamily: FontFamily.body, fontSize: FontSize.sm,
+    color: Colors.textMuted, paddingVertical: Spacing.sm,
+  },
+  option: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  optionText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.md, color: Colors.text },
+  sentBox: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xl },
+  sentEmoji: { fontSize: 40 },
+  sentTitle: { fontFamily: FontFamily.heading, fontSize: FontSize.lg, color: Colors.white },
+  sentSub: {
+    fontFamily: FontFamily.body, fontSize: FontSize.sm,
+    color: Colors.textMuted, textAlign: 'center',
+  },
+});
 
 const styles = StyleSheet.create({
   root: {

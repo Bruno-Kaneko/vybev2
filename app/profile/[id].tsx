@@ -21,7 +21,7 @@ import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
 import { Avatar, Skeleton, VybeButton } from '@/components/ui';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/context/AuthContext';
-import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser, getFollowRequestStatus, sendFollowRequest, cancelFollowRequest, notifyUser } from '@/lib/db';
+import { getProfile, getUserPosts, isFollowing, followUser, unfollowUser, getFollowRequestStatus, sendFollowRequest, cancelFollowRequest, notifyUser, isBlocked, blockUser, unblockUser, createReport } from '@/lib/db';
 import type { FollowRequestStatus } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import type { RelationshipStatus, Post, User } from '@/types';
@@ -69,6 +69,9 @@ export default function ProfileScreen() {
   const [followLoading, setFollowLoading] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportSent, setReportSent] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
   const [unfollowConfirmOpen, setUnfollowConfirmOpen] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
@@ -88,19 +91,47 @@ export default function ProfileScreen() {
     if (!id || !isReal) { setLoadingProfile(false); return; }
     if (!silent) setLoadingProfile(true);
     try {
-      const [p, posts, followingResult, reqStatus] = await Promise.all([
+      const [p, posts, followingResult, reqStatus, isBlockedResult] = await Promise.all([
         getProfile(id),
         getUserPosts(id),
         authUser ? isFollowing(authUser.id, id) : Promise.resolve(false),
         authUser && id !== authUser.id ? getFollowRequestStatus(authUser.id, id) : Promise.resolve('none' as FollowRequestStatus),
+        authUser && id !== authUser.id ? isBlocked(authUser.id, id) : Promise.resolve(false),
       ]);
       if (p) setProfileUser(p);
       setUserPosts(posts);
       setFollowing(followingResult);
       setRequestStatus(reqStatus);
+      setBlocked(isBlockedResult);
     } catch {}
     setLoadingProfile(false);
   }, [id, isReal, authUser?.id]);
+
+  const handleToggleBlock = async () => {
+    if (!authUser || !id || blockBusy) return;
+    setBlockBusy(true);
+    setActionsOpen(false);
+    try {
+      if (blocked) {
+        await unblockUser(authUser.id, id);
+        setBlocked(false);
+      } else {
+        await blockUser(authUser.id, id);
+        setBlocked(true);
+        setFollowing(false); // bloqueio quebra follow mútuo
+      }
+    } catch {} finally {
+      setBlockBusy(false);
+    }
+  };
+
+  const handleReport = async (reason: string) => {
+    if (!authUser || !id) return;
+    try {
+      await createReport(authUser.id, 'user', id, reason);
+    } catch {}
+    setReportSent(true);
+  };
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
@@ -274,9 +305,11 @@ export default function ProfileScreen() {
             <TouchableOpacity onPress={handleShare} style={styles.moreBtn}>
               <Share2 color={Colors.textMuted} size={18} strokeWidth={2.2} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setReportSent(false); setReportOpen(true); }} style={styles.moreBtn}>
-              <MoreHorizontal color={Colors.textMuted} size={20} strokeWidth={2.2} />
-            </TouchableOpacity>
+            {!isOwnProfile && (
+              <TouchableOpacity onPress={() => setActionsOpen(true)} style={styles.moreBtn}>
+                <MoreHorizontal color={Colors.textMuted} size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -402,6 +435,33 @@ export default function ProfileScreen() {
       </TouchableOpacity>
     </Modal>
 
+    {/* Actions menu (Reportar / Bloquear) */}
+    <Modal visible={actionsOpen} transparent animationType="fade" onRequestClose={() => setActionsOpen(false)}>
+      <TouchableOpacity style={reportStyles.overlay} activeOpacity={1} onPress={() => setActionsOpen(false)}>
+        <View style={reportStyles.sheet} onStartShouldSetResponder={() => true}>
+          <TouchableOpacity
+            style={reportStyles.option}
+            activeOpacity={0.75}
+            onPress={() => { setActionsOpen(false); setReportSent(false); setReportOpen(true); }}
+          >
+            <Flag color={Colors.urgent} size={18} strokeWidth={2.2} />
+            <Text style={[reportStyles.optionText, { flex: 1, marginLeft: Spacing.md }]}>Reportar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={reportStyles.option}
+            activeOpacity={0.75}
+            onPress={handleToggleBlock}
+            disabled={blockBusy}
+          >
+            <Lock color={blocked ? Colors.secondary : Colors.urgent} size={18} strokeWidth={2.2} />
+            <Text style={[reportStyles.optionText, { flex: 1, marginLeft: Spacing.md, color: blocked ? Colors.secondary : Colors.urgent }]}>
+              {blocked ? 'Desbloquear' : 'Bloquear'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+
     {/* Report modal */}
     <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
       <TouchableOpacity style={reportStyles.overlay} activeOpacity={1} onPress={() => setReportOpen(false)}>
@@ -434,7 +494,7 @@ export default function ProfileScreen() {
                   key={reason}
                   style={reportStyles.option}
                   activeOpacity={0.75}
-                  onPress={() => setReportSent(true)}
+                  onPress={() => handleReport(reason)}
                 >
                   <Text style={reportStyles.optionText}>{reason}</Text>
                   <ChevronLeft color={Colors.textMuted} size={14} strokeWidth={2} style={{ transform: [{ rotate: '180deg' }] }} />

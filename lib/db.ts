@@ -910,3 +910,104 @@ export async function followPlace(userId: string, placeId: string): Promise<void
 export async function unfollowPlace(userId: string, placeId: string): Promise<void> {
   await supabase.from('place_follows').delete().eq('user_id', userId).eq('place_id', placeId);
 }
+
+// ────────────────────────────────────────────────
+// USER BLOCKS (estilo Instagram)
+// ────────────────────────────────────────────────
+
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  // Bloquear: insere relação E remove follows mútuos (estilo Instagram)
+  await Promise.all([
+    supabase.from('user_blocks').insert({ blocker_id: blockerId, blocked_id: blockedId }),
+    supabase.from('follows').delete()
+      .or(`and(follower_id.eq.${blockerId},following_id.eq.${blockedId}),and(follower_id.eq.${blockedId},following_id.eq.${blockerId})`),
+  ]);
+}
+
+export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
+  await supabase.from('user_blocks').delete()
+    .eq('blocker_id', blockerId).eq('blocked_id', blockedId);
+}
+
+export async function isBlocked(blockerId: string, blockedId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('user_blocks')
+    .select('blocked_id')
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', blockedId)
+    .maybeSingle();
+  return !!data;
+}
+
+// Retorna os ids de usuários que o user bloqueou OU que o bloquearam
+// (ambos lados precisam sumir das listagens)
+export async function getBlockedIds(userId: string): Promise<string[]> {
+  const [a, b] = await Promise.all([
+    supabase.from('user_blocks').select('blocked_id').eq('blocker_id', userId),
+    supabase.from('user_blocks').select('blocker_id').eq('blocked_id', userId),
+  ]);
+  const ids = new Set<string>();
+  (a.data ?? []).forEach((r: any) => ids.add(r.blocked_id));
+  (b.data ?? []).forEach((r: any) => ids.add(r.blocker_id));
+  return [...ids];
+}
+
+export async function getBlockedUsers(userId: string): Promise<Array<{ id: string; username: string; display_name: string | null; avatar_url: string | null }>> {
+  const { data } = await supabase
+    .from('user_blocks')
+    .select('blocked:profiles!blocked_id(id, username, display_name, avatar_url)')
+    .eq('blocker_id', userId);
+  return (data ?? []).map((r: any) => r.blocked).filter(Boolean);
+}
+
+// ────────────────────────────────────────────────
+// REPORTS (denúncias)
+// ────────────────────────────────────────────────
+
+export type ReportTarget = 'post' | 'user' | 'place' | 'comment';
+
+export async function createReport(
+  reporterId: string,
+  targetType: ReportTarget,
+  targetId: string,
+  reason: string,
+  description?: string,
+): Promise<void> {
+  await supabase.from('reports').insert({
+    reporter_id: reporterId,
+    target_type: targetType,
+    target_id: targetId,
+    reason,
+    description: description ?? null,
+  });
+}
+
+// ────────────────────────────────────────────────
+// DAILY CHECK-IN
+// ────────────────────────────────────────────────
+
+export const DAILY_CHECKIN_POINTS = 10;
+
+export async function hasCheckedInToday(userId: string): Promise<boolean> {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const { data } = await supabase
+    .from('daily_checkins')
+    .select('checkin_date')
+    .eq('user_id', userId)
+    .eq('checkin_date', today)
+    .maybeSingle();
+  return !!data;
+}
+
+// Faz check-in diário. Retorna true se sucesso, false se já fez hoje.
+export async function doDailyCheckin(userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('daily_checkins')
+    .insert({ user_id: userId, points_awarded: DAILY_CHECKIN_POINTS });
+  // Se erro for de PK duplicada (já fez hoje), retorna false. Outros erros propagam.
+  if (error) {
+    if (error.code === '23505') return false; // duplicate key
+    throw error;
+  }
+  return true;
+}

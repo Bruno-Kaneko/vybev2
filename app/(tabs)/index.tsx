@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Bell, Check, Flame, Heart, Link, LogOut, MapPin, MessageCircle, Send, Share2, Timer, UserPlus, Users, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants';
-import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, hasReacted, addReaction, removeReaction, getChats, notifyUser } from '@/lib/db';
+import { getFeedPosts, getFollowingFeedPosts, haversineKm, hasLiked, likePost, unlikePost, hasReacted, addReaction, removeReaction, getChats, notifyUser, getBlockedIds } from '@/lib/db';
 import type { DBNotification, DBChat } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationsContext';
@@ -91,12 +91,14 @@ export default function HomeScreen() {
 
   const loadFeed = useCallback(async () => {
     try {
-      const [geral, seguindo] = await Promise.all([
+      const [geral, seguindo, blocked] = await Promise.all([
         getFeedPosts(),
         authUserHome?.id ? getFollowingFeedPosts(authUserHome.id) : Promise.resolve([] as Post[]),
+        authUserHome?.id ? getBlockedIds(authUserHome.id) : Promise.resolve([] as string[]),
       ]);
-      setGeralPosts(geral);
-      setSeguindoPosts(seguindo);
+      const blockedSet = new Set(blocked);
+      setGeralPosts(geral.filter(p => !blockedSet.has(p.userId)));
+      setSeguindoPosts(seguindo.filter(p => !blockedSet.has(p.userId)));
     } catch {
       setGeralPosts([]);
       setSeguindoPosts([]);
