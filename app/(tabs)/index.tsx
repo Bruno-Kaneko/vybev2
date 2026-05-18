@@ -28,6 +28,8 @@ import type { DBNotification, DBChat } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationsContext';
 import { Avatar, BrandLogo, PostTimer, Skeleton } from '@/components/ui';
+import { StoryBar } from '@/components/ui/StoryBar';
+import { StoryViewer } from '@/components/ui/StoryViewer';
 import { useResponsive } from '@/hooks/useResponsive';
 import * as Location from 'expo-location';
 import type { Post } from '@/types';
@@ -67,6 +69,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [feedLoading, setFeedLoading] = useState(true);
   const [realChats, setRealChats] = useState<DBChat[]>([]);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [storyViewerUserId, setStoryViewerUserId] = useState<string | null>(null);
 
   const { notifications: notifs, unreadCount, markAllAsRead, dismiss, seenAt: notifSeenAt, isUnread: isNotifUnread } = useNotifications();
 
@@ -199,15 +203,21 @@ export default function HomeScreen() {
           },
         ]}
         ListHeaderComponent={
-          <HomeHeader
-            maxWidth={responsive.feedMaxWidth}
-            onMessagesPress={() => setMessagesOpen(true)}
-            onGrupoesPress={() => setGrupoesOpen(true)}
-            onNotifPress={() => setNotifOpen(true)}
-            notifCount={unreadCount}
-            activeTab={activeTab}
-            onTabPress={setActiveTab}
-          />
+          <>
+            <HomeHeader
+              maxWidth={responsive.feedMaxWidth}
+              onMessagesPress={() => setMessagesOpen(true)}
+              onGrupoesPress={() => setGrupoesOpen(true)}
+              onNotifPress={() => setNotifOpen(true)}
+              notifCount={unreadCount}
+              activeTab={activeTab}
+              onTabPress={setActiveTab}
+            />
+            <StoryBar
+              onOpenStory={(uid) => { setStoryViewerUserId(uid); setStoryViewerOpen(true); }}
+              onCreateStory={() => router.push('/story/create' as any)}
+            />
+          </>
         }
         renderItem={({ item }) => (
           <PostCard post={item} maxWidth={responsive.feedMaxWidth} isPhone={responsive.isPhone} />
@@ -219,6 +229,11 @@ export default function HomeScreen() {
               ? <FeedEmptyState tab={activeTab} locationDenied={locationDenied} locationLoading={locationLoading} />
               : null
         }
+      />
+      <StoryViewer
+        visible={storyViewerOpen}
+        userId={storyViewerUserId}
+        onClose={() => setStoryViewerOpen(false)}
       />
       <MessagesDrawer
         visible={messagesOpen}

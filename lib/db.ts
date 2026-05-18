@@ -1011,3 +1011,114 @@ export async function doDailyCheckin(userId: string): Promise<boolean> {
   }
   return true;
 }
+
+// ────────────────────────────────────────────────
+// STORIES (status temporário, 24h)
+// ────────────────────────────────────────────────
+
+export type DBStory = {
+  id: string;
+  user_id: string;
+  media_url: string | null;
+  caption: string | null;
+  bg_color: string | null;
+  expires_at: string;
+  created_at: string;
+};
+
+export type StoryWithAuthor = DBStory & {
+  author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+  viewed: boolean;
+};
+
+// Lista todos os stories ativos, agrupados por user (mais recente primeiro de cada user).
+// Quem segue aparece primeiro; pode ser refinado depois.
+export async function getActiveStories(viewerId?: string): Promise<StoryWithAuthor[]> {
+  const { data: stories, error } = await supabase
+    .from('stories')
+    .select('id, user_id, media_url, caption, bg_color, expires_at, created_at, author:profiles!user_id(id, username, display_name, avatar_url)')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+  if (error || !stories) return [];
+
+  // Quais já foram vistos pelo viewer?
+  let viewedIds = new Set<string>();
+  if (viewerId && stories.length > 0) {
+    const { data: views } = await supabase
+      .from('story_views')
+      .select('story_id')
+      .eq('viewer_id', viewerId)
+      .in('story_id', stories.map((s: any) => s.id));
+    viewedIds = new Set((views ?? []).map((v: any) => v.story_id));
+  }
+
+  return stories.map((s: any) => ({
+    ...s,
+    author: s.author,
+    viewed: viewedIds.has(s.id),
+  })) as StoryWithAuthor[];
+}
+
+// Pega stories ativos de UM user específico (pra exibir no viewer)
+export async function getUserActiveStories(userId: string): Promise<DBStory[]> {
+  const { data, error } = await supabase
+    .from('stories')
+    .select('id, user_id, media_url, caption, bg_color, expires_at, created_at')
+    .eq('user_id', userId)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: true });
+  if (error || !data) return [];
+  return data as DBStory[];
+}
+
+// Upload de mídia pro bucket stories
+export async function uploadStoryMedia(userId: string, localUri: string): Promise<string> {
+  const path = `${userId}/${Date.now()}.jpg`;
+  const blob = await uriToBlob(localUri);
+  const { error } = await supabase.storage
+    .from('stories')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+  if (error) throw error;
+  const { data: { publicUrl } } = supabase.storage.from('stories').getPublicUrl(path);
+  return publicUrl;
+}
+
+export async function createStory(opts: {
+  userId: string;
+  mediaUrl?: string;
+  caption?: string;
+  bgColor?: string;
+}): Promise<DBStory> {
+  const { data, error } = await supabase
+    .from('stories')
+    .insert({
+      user_id: opts.userId,
+      media_url: opts.mediaUrl ?? null,
+      caption: opts.caption ?? null,
+      bg_color: opts.bgColor ?? null,
+    })
+    .select('id, user_id, media_url, caption, bg_color, expires_at, created_at')
+    .single();
+  if (error) throw error;
+  return data as DBStory;
+}
+
+export async function deleteStory(storyId: string): Promise<void> {
+  await supabase.from('stories').delete().eq('id', storyId);
+}
+
+export async function markStoryViewed(storyId: string, viewerId: string): Promise<void> {
+  await supabase.from('story_views').upsert(
+    { story_id: storyId, viewer_id: viewerId },
+    { onConflict: 'story_id,viewer_id', ignoreDuplicates: true }
+  );
+}
+
+export async function getStoryViewers(storyId: string): Promise<Array<{ id: string; username: string; display_name: string | null; avatar_url: string | null; viewed_at: string }>> {
+  const { data } = await supabase
+    .from('story_views')
+    .select('viewed_at, viewer:profiles!viewer_id(id, username, display_name, avatar_url)')
+    .eq('story_id', storyId)
+    .order('viewed_at', { ascending: false });
+  return (data ?? []).map((r: any) => ({ ...r.viewer, viewed_at: r.viewed_at }));
+}
