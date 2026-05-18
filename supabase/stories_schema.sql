@@ -1,5 +1,5 @@
 -- ────────────────────────────────────────────────────────────────
--- VYBE — Stories (status temporário, 24h)
+-- VYBE — Stories (status temporário, 6h)
 --
 -- Tabela `stories` guarda os stories (foto + texto opcional)
 -- Tabela `story_views` guarda quem viu qual story (pro owner ver lista)
@@ -13,7 +13,7 @@ create table if not exists public.stories (
   media_url   text,                                -- url da foto (null se for só texto)
   caption     text,                                -- texto sobreposto / legenda
   bg_color    text,                                -- cor de fundo quando é só texto (hex)
-  expires_at  timestamptz not null default (now() + interval '24 hours'),
+  expires_at  timestamptz not null default (now() + interval '6 hours'),
   created_at  timestamptz not null default now(),
   check (media_url is not null or caption is not null)
 );
