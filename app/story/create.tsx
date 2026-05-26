@@ -39,7 +39,7 @@ export default function CreateStoryScreen() {
       quality: 0.85,
       allowsEditing: false,
     });
-    if (!res.canceled) {
+    if (!res.canceled && res.assets[0]) {
       setImageUri(res.assets[0].uri);
       setMode('edit-photo');
     }

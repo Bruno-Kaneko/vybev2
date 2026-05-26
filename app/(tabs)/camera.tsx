@@ -65,7 +65,7 @@ function CameraCapture({ onCapture, onClose }: { onCapture: (uri: string) => voi
 
   const pickFromFile = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
-    if (!result.canceled) onCapture(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) onCapture(result.assets[0].uri);
   };
 
   const shoot = async () => {
@@ -156,8 +156,9 @@ export default function CameraScreen() {
       const nearby = bypassLocation ? all : all.filter(p => p.distanceM <= MAX_POST_RADIUS_KM * 1000);
 
       setNearbyPlaces(nearby);
-      if (nearby.length > 0) {
-        setSelectedPlace(prev => (prev ? nearby.find(n => n.id === prev.id) ?? nearby[0] : nearby[0]));
+      const first = nearby[0];
+      if (first) {
+        setSelectedPlace(prev => (prev ? nearby.find(n => n.id === prev.id) ?? first : first));
       }
 
       try {

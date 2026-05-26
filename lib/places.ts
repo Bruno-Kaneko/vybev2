@@ -48,7 +48,7 @@ function extractNeighborhood(address: string): string {
   // Google formatted address example: "Rua Augusta, 200 - Consolação, São Paulo - SP, 01304-000, Brazil"
   // Try to extract neighborhood (between "-" and city)
   const match = address.match(/-\s*([^,-]+?),\s*São Paulo/i);
-  if (match) return match[1].trim();
+  if (match && match[1]) return match[1].trim();
   // Fallback: pick the segment before the city
   const parts = address.split(',').map(s => s.trim());
   return parts[1] ?? '';

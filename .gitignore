@@ -43,6 +43,7 @@ yarn-error.*
 
 # secrets (tokens — never commit)
 constants/mapbox-token.ts
+google-play-service-account.json
 
 # generated / temp
 .claude/

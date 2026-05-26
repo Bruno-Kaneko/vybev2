@@ -14,7 +14,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p1',
     userId: '1',
-    user: MOCK_USERS[0],
+    user: MOCK_USERS[0]!,
     imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80',
     caption: 'A night não para!',
     placeName: 'Club Fama',
@@ -28,7 +28,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p2',
     userId: '2',
-    user: MOCK_USERS[1],
+    user: MOCK_USERS[1]!,
     imageUrl: 'https://images.unsplash.com/photo-1545128485-c400e7702796?w=600&q=80',
     caption: 'Quem tá aqui?',
     placeName: 'Bar do Victor',
@@ -42,7 +42,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p3',
     userId: '3',
-    user: MOCK_USERS[2],
+    user: MOCK_USERS[2]!,
     imageUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&q=80',
     caption: 'Esse DJ tá demais',
     placeName: 'D-Edge',
@@ -56,7 +56,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p4',
     userId: '4',
-    user: MOCK_USERS[3],
+    user: MOCK_USERS[3]!,
     imageUrl: 'https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=600&q=80',
     caption: 'Sextou!',
     placeName: 'Outs Club',
@@ -70,7 +70,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p5',
     userId: '1',
-    user: MOCK_USERS[0],
+    user: MOCK_USERS[0]!,
     imageUrl: 'https://images.unsplash.com/photo-1574391884720-bbc3740c59d1?w=600&q=80',
     caption: 'Inferno tá pegando fogo 🔥',
     placeName: 'Inferno Club',
@@ -84,7 +84,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p6',
     userId: '3',
-    user: MOCK_USERS[2],
+    user: MOCK_USERS[2]!,
     imageUrl: 'https://images.unsplash.com/photo-1504609773096-104ff2c73ba4?w=600&q=80',
     caption: 'Samba na Madalena ❤️',
     placeName: 'Hostel Beer',
@@ -98,7 +98,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p7',
     userId: '2',
-    user: MOCK_USERS[1],
+    user: MOCK_USERS[1]!,
     imageUrl: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=600&q=80',
     caption: 'Clash é brabo mesmo',
     placeName: 'Clash Club',
@@ -112,7 +112,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p8',
     userId: '4',
-    user: MOCK_USERS[3],
+    user: MOCK_USERS[3]!,
     imageUrl: 'https://images.unsplash.com/photo-1568702846914-96b305d2aaeb?w=600&q=80',
     caption: 'Caipifruta do Buena Vista 🍹',
     placeName: 'Buena Vista',
@@ -126,7 +126,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p9',
     userId: '1',
-    user: MOCK_USERS[0],
+    user: MOCK_USERS[0]!,
     imageUrl: 'https://images.unsplash.com/photo-1571266028243-d220c6a6cb94?w=600&q=80',
     caption: 'Cine Joia nunca decepciona',
     placeName: 'Cine Joia',
@@ -140,7 +140,7 @@ export const MOCK_POSTS: Post[] = [
   {
     id: 'p10',
     userId: '3',
-    user: MOCK_USERS[2],
+    user: MOCK_USERS[2]!,
     imageUrl: 'https://images.unsplash.com/photo-1543007630-9710e4a00a20?w=600&q=80',
     caption: 'Bolinho e gelada no Trato Feito 🍺',
     placeName: 'Trato Feito',
@@ -211,7 +211,7 @@ export const MOCK_REWARDS: Reward[] = [
 ];
 
 export const MOCK_CHATS: Chat[] = [
-  { id: 'c1', participants: [MOCK_USERS[0]], lastMessage: 'Vc ainda tá aqui?', lastMessageAt: NOW - 5 * 60 * 1000, unreadCount: 2, createdAt: NOW - 7.5 * HOUR },
-  { id: 'c2', participants: [MOCK_USERS[1]], lastMessage: 'Que festa incrível!', lastMessageAt: NOW - 15 * 60 * 1000, unreadCount: 0, createdAt: NOW - 1 * HOUR },
-  { id: 'c3', participants: [MOCK_USERS[2]], lastMessage: 'Vem aqui no D-Edge!', lastMessageAt: NOW - 45 * 60 * 1000, unreadCount: 1, createdAt: NOW - 4 * HOUR },
+  { id: 'c1', participants: [MOCK_USERS[0]!], lastMessage: 'Vc ainda tá aqui?', lastMessageAt: NOW - 5 * 60 * 1000, unreadCount: 2, createdAt: NOW - 7.5 * HOUR },
+  { id: 'c2', participants: [MOCK_USERS[1]!], lastMessage: 'Que festa incrível!', lastMessageAt: NOW - 15 * 60 * 1000, unreadCount: 0, createdAt: NOW - 1 * HOUR },
+  { id: 'c3', participants: [MOCK_USERS[2]!], lastMessage: 'Vem aqui no D-Edge!', lastMessageAt: NOW - 45 * 60 * 1000, unreadCount: 1, createdAt: NOW - 4 * HOUR },
 ];

@@ -443,7 +443,7 @@ function DiscoverHeader({
                 ) : (
                   <View style={[styles.userAvatarImg, styles.userAvatarFallback]}>
                     <Text style={styles.userAvatarInitial}>
-                      {(u.display_name ?? u.username)[0].toUpperCase()}
+                      {(u.display_name ?? u.username).charAt(0).toUpperCase()}
                     </Text>
                   </View>
                 )}

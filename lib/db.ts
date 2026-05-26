@@ -246,7 +246,7 @@ export async function deletePost(postId: string, imageUrl?: string): Promise<voi
     const idx = imageUrl.indexOf(marker);
     if (idx !== -1) {
       const path = imageUrl.slice(idx + marker.length).split('?')[0];
-      supabase.storage.from('posts').remove([path]).catch(() => {});
+      if (path) supabase.storage.from('posts').remove([path]).catch(() => {});
     }
   }
 }

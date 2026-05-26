@@ -138,7 +138,7 @@ export default function OnboardingScreen() {
                 key={i}
                 index={i}
                 scrollX={scrollX}
-                accent={SLIDES[currentIndex].accent}
+                accent={SLIDES[currentIndex]?.accent ?? Colors.secondary}
                 screenWidth={screenWidth}
               />
             ))}

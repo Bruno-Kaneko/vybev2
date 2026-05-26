@@ -21,7 +21,7 @@ const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
 
 export function VybeTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const visibleRoutes = state.routes.filter(route => (descriptors[route.key].options as any).href !== null);
+  const visibleRoutes = state.routes.filter(route => (descriptors[route.key]?.options as any)?.href !== null);
 
   // The camera screen is full-bleed (Instagram-style) — no tab bar over it
   if (state.routes[state.index]?.name === 'camera') return null;
